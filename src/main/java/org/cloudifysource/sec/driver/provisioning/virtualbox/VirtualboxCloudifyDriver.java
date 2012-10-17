@@ -1,0 +1,364 @@
+package org.cloudifysource.sec.driver.provisioning.virtualbox;
+
+import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.logging.Level;
+
+import org.apache.commons.lang.StringUtils;
+import org.cloudifysource.dsl.cloud.Cloud;
+import org.cloudifysource.dsl.cloud.FileTransferModes;
+import org.cloudifysource.dsl.cloud.RemoteExecutionModes;
+import org.cloudifysource.esc.byon.ByonDeployer;
+import org.cloudifysource.esc.driver.provisioning.CloudDriverSupport;
+import org.cloudifysource.esc.driver.provisioning.CloudProvisioningException;
+import org.cloudifysource.esc.driver.provisioning.MachineDetails;
+import org.cloudifysource.esc.driver.provisioning.ProvisioningDriver;
+import org.cloudifysource.esc.driver.provisioning.context.ProvisioningDriverClassContext;
+import org.cloudifysource.sec.driver.provisioning.virtualbox.api.VirtualBoxMachineInfo;
+import org.cloudifysource.sec.driver.provisioning.virtualbox.api.VirtualBoxService;
+import org.openspaces.admin.Admin;
+
+public class VirtualboxCloudifyDriver extends CloudDriverSupport implements ProvisioningDriver
+{
+    private static final java.util.logging.Logger logger = java.util.logging.Logger
+            .getLogger(VirtualboxCloudifyDriver.class.getName());
+    
+    private static final String VBOX_BOXES_PATH = "vbox.boxes.path";
+    private static final String VBOX_HOSTONLYIF_IP = "vbox.hostonlyinterface.ip";
+    private static final String VBOX_HOSTONLYIF_MASK = "vbox.hostonlyinterface.mask";
+    private static final String VBOX_HEADLESS = "vbox.headless";
+    
+    private String boxesPath;
+    
+    private String hostonlyifIP;
+    private String hostonlyifMask;
+    private String hostonlyifName;
+    
+    private boolean headless;
+    
+    private String baseIp;
+    private String hostsFile;
+    
+    private String serverNamePrefix;
+    
+    private VirtualBoxService virtualBoxService = new VirtualBoxService(); 
+
+    private void checkHostOnlyInterface() throws Exception{
+        
+        if(this.hostonlyifName != null){
+            return;
+        }
+        
+        // detect if this interface exists, or create it
+        this.hostonlyifName = virtualBoxService.existsHostOnlyInterface(this.hostonlyifIP, this.hostonlyifMask);
+    
+        if(this.hostonlyifName == null){
+            hostonlyifName = virtualBoxService.createHostOnlyInterface(this.hostonlyifIP, this.hostonlyifMask);
+        }
+        
+        this.baseIp = this.hostonlyifIP.substring(0, this.hostonlyifIP.lastIndexOf('.'));
+        
+        // generate a hosts file with fixed IP
+        hostsFile = "127.0.0.1  localhost\n";
+        
+        for(int cpt = 2; cpt < 10; cpt++){
+            hostsFile += this.baseIp+"."+cpt+"\t"+this.cloud.getProvider().getManagementGroup()+cpt+"\n";
+        }
+        
+        for(int cpt = 10; cpt < 30; cpt++){
+            hostsFile += this.baseIp+"."+cpt+"\t"+this.cloud.getProvider().getMachineNamePrefix()+cpt+"\n";            
+        }
+    }
+    
+    public void setProvisioningDriverClassContext(
+            ProvisioningDriverClassContext provisioningDriverClassContext) {
+    }
+    
+    public void close() {
+    }
+
+    @Override
+    public void setConfig(Cloud cloud, String templateName, boolean management) {
+        super.setConfig(cloud, templateName, management);
+
+        if (this.management) {
+            this.serverNamePrefix = this.cloud.getProvider().getManagementGroup();
+        } else {
+            this.serverNamePrefix = this.cloud.getProvider().getMachineNamePrefix();
+        }
+        
+        this.boxesPath = (String)this.cloud.getCustom().get(VBOX_BOXES_PATH);
+        if (this.boxesPath == null) {
+            throw new IllegalArgumentException("Custom field '" + VBOX_BOXES_PATH + "' must be set");
+        }
+        
+        this.hostonlyifIP = (String)this.cloud.getCustom().get(VBOX_HOSTONLYIF_IP);
+        if (this.hostonlyifIP == null) {
+            throw new IllegalArgumentException("Custom field '" + VBOX_HOSTONLYIF_IP + "' must be set");
+        }
+        
+        this.hostonlyifMask = (String)this.cloud.getCustom().get(VBOX_HOSTONLYIF_MASK);
+        if (this.hostonlyifMask == null) {
+            throw new IllegalArgumentException("Custom field '" + VBOX_HOSTONLYIF_MASK + "' must be set");
+        }
+        
+        String headlessString = (String)this.cloud.getCustom().get(VBOX_HEADLESS);
+        if (headlessString == null) {
+            this.headless = true;
+        }
+        else {
+            this.headless = Boolean.parseBoolean(headlessString);
+        }
+    }
+
+    public MachineDetails startMachine(long duration, TimeUnit timeout)
+            throws TimeoutException, CloudProvisioningException {
+        
+        logger.info("Start VBox machine");
+        
+        try {
+            checkHostOnlyInterface();
+        } catch (Exception ex) {
+            throw new CloudProvisioningException("Unable to create host interface", ex);
+        }
+        
+        MachineDetails md;
+        String machineName = serverNamePrefix;
+        String machineNamePrefix = (String) this.template.getCustom().get("machineNamePrefix");
+        if (!StringUtils.isEmpty(machineNamePrefix)) {
+            machineName = machineNamePrefix;
+        }
+        
+        int numberOfCores = this.template.getNumberOfCores();
+        int machineMemoryMB = this.template.getMachineMemoryMB();
+        
+        String machineTemplate = this.template.getImageId();
+        
+        File boxesPathFile = new File(this.boxesPath);
+        File machineTemplateFolderFile = new File(boxesPathFile, machineTemplate);
+        File machineTemplateOvfFile = new File(machineTemplateFolderFile, "box.ovf");
+        
+        try {
+            // Retrieve the existing VMs
+            VirtualBoxMachineInfo[] infos = virtualBoxService.getAll();
+            
+            int id = 0;
+            for(VirtualBoxMachineInfo info : infos){
+                if(info.getMachineName().startsWith(machineName)){
+                    // TODO : try catch parsing int
+                    int currentId = Integer.parseInt(info.getMachineName().substring(machineName.length()));
+                    if(currentId > id){
+                        id = currentId;
+                    }
+                }
+            }
+            
+            // increment the id
+            id++;
+            
+            int lastIP = 0;
+            if (this.management) {
+                lastIP = 1 + id;
+            }
+            else {
+                lastIP = 9 + id;
+            }
+            String addressIP = this.baseIp+"."+lastIP;
+            
+            // TODO : run in a thread, so detect the Timeout
+            
+            // go to the folder with "boxes"
+            VirtualBoxMachineInfo vboxInfo = virtualBoxService.create(
+                    machineTemplateOvfFile.toString(), 
+                    this.serverNamePrefix + id, 
+                    numberOfCores, 
+                    machineMemoryMB,
+                    this.hostonlyifName);
+            
+            virtualBoxService.start(
+                    vboxInfo.getMachineName(),
+                    this.template.getUsername(),
+                    this.template.getPassword(),
+                    this.serverNamePrefix + id,
+                    headless);
+            
+            virtualBoxService.updateNetworkingInterfaces(
+                    vboxInfo.getMachineName(),
+                    this.template.getUsername(),
+                    this.template.getPassword(),
+                    addressIP,
+                    this.hostonlyifMask);
+            
+            virtualBoxService.updateHosts(
+                    vboxInfo.getMachineName(),
+                    this.template.getUsername(),
+                    this.template.getPassword(),
+                    this.hostsFile);
+            
+            md = new MachineDetails();
+            md.setMachineId(vboxInfo.getGuid());
+            md.setAgentRunning(false);
+            md.setCloudifyInstalled(false);
+            md.setInstallationDirectory(null);
+            md.setRemoteDirectory(this.template.getRemoteDirectory());
+            md.setRemoteUsername(this.template.getUsername());
+            md.setRemotePassword(this.template.getPassword());
+            md.setRemoteExecutionMode(this.template.getRemoteExecution());
+            md.setFileTransferMode(this.template.getFileTransfer());
+            md.setUsePrivateAddress(true);
+            md.setPrivateAddress(addressIP);
+            md.setPublicAddress(addressIP);
+            
+        } catch (final Exception e) {
+            throw new CloudProvisioningException(e);
+        }
+        return md;
+    }
+
+    public MachineDetails[] startManagementMachines(long duration, TimeUnit timeout)
+            throws TimeoutException, CloudProvisioningException {
+        
+        try {
+            checkHostOnlyInterface();
+        } catch (Exception ex) {
+            throw new CloudProvisioningException("Unable to create host interface", ex);
+        }
+        
+        //final int numOfManagementMachines = cloud.getProvider().getNumberOfManagementMachines();
+
+        //final ExecutorService executor = Executors.newFixedThreadPool(cloud.getProvider().getNumberOfManagementMachines());
+
+        //try {
+        //    return doStartManagement(duration, timeout, numOfManagementMachines, executor);
+        //} finally {
+        //    executor.shutdown();
+        //}
+        
+        MachineDetails md = new MachineDetails();
+        md.setMachineId(null);
+        md.setAgentRunning(false);
+        md.setCloudifyInstalled(false);
+        md.setInstallationDirectory(null);
+        md.setRemoteDirectory(this.template.getRemoteDirectory());
+        md.setRemoteUsername(this.template.getUsername());
+        md.setRemotePassword(this.template.getPassword());
+        md.setRemoteExecutionMode(this.template.getRemoteExecution());
+        md.setFileTransferMode(this.template.getFileTransfer());
+        md.setUsePrivateAddress(true);
+        md.setPrivateAddress(this.hostonlyifIP);
+        md.setPublicAddress(this.hostonlyifIP);
+        
+        return new MachineDetails[]{ md };
+    }
+
+    private MachineDetails[] doStartManagement(final long duration, final TimeUnit timeout, int numOfManagementMachines,
+            ExecutorService executor) throws CloudProvisioningException {
+        
+        // launch machine on a thread
+        final List<Future<MachineDetails>> list = new ArrayList<Future<MachineDetails>>(numOfManagementMachines);
+        for (int i = 0; i < numOfManagementMachines; i++) {
+            final Future<MachineDetails> task = executor.submit(new Callable<MachineDetails>() {
+
+                // @Override
+                public MachineDetails call()
+                        throws Exception {
+                    return startMachine(duration, timeout);
+                }
+
+            });
+            list.add(task);
+        }
+
+        // get the machines
+        Exception firstException = null;
+        final List<MachineDetails> machines = new ArrayList<MachineDetails>(numOfManagementMachines);
+        for (final Future<MachineDetails> future : list) {
+            try {
+                machines.add(future.get());
+            } catch (final Exception e) {
+                if (firstException == null) {
+                    firstException = e;
+                }
+            }
+        }
+
+        if (firstException == null) {
+            return machines.toArray(new MachineDetails[machines.size()]);
+        } else {
+            // in case of an exception, clear the machines
+            logger.warning("Provisioning of management machines failed, the following node will be shut down: "
+                    + machines);
+            for (final MachineDetails machineDetails : machines) {
+                try {
+                    // TODO : do it in a thread to detect TIMEOUT
+                    virtualBoxService.stop(machineDetails.getMachineId());
+                    virtualBoxService.destroy(machineDetails.getMachineId());
+                } catch (final Exception e) {
+                    logger.log(Level.SEVERE,
+                            "While shutting down machine after provisioning of management machines failed, "
+                                    + "shutdown of node: " + machineDetails.getMachineId()
+                                    + " failed. This machine may be leaking. Error was: " + e.getMessage(), e);
+                }
+            }
+
+            throw new CloudProvisioningException(
+                    "Failed to launch management machines: " + firstException.getMessage(), firstException);
+        }
+    }
+
+    public boolean stopMachine(String machineIp, long duration, TimeUnit timeout)
+            throws InterruptedException, TimeoutException,
+            CloudProvisioningException {
+        
+        logger.info("Stop VBox machine");
+        
+        try{
+            
+            //if(!machineIp.startsWith(this.baseIp)){
+            //    throw new CloudProvisioningException("Invalid IP: "+machineIp+", should start with "+this.baseIp);
+            //}
+            
+            //String lastIpString =  machineIp.substring(this.baseIp.length()+1);
+            //Integer lastIp = Integer.parseInt(lastIpString);
+            
+            //String machineName = this.serverNamePrefix + (lastIp - 1);
+            
+            //VirtualBoxMachineInfo info = this.virtualBoxService.getInfo(machineName);
+            //this.virtualBoxService.stop(info.getGuid());
+            //this.virtualBoxService.destroy(info.getGuid());
+            
+            
+            
+            return true;
+        }
+        catch(Exception ex){
+            // TODO : logs
+            return false;
+        }
+    }
+
+    public void stopManagementMachines() throws TimeoutException,
+            CloudProvisioningException {
+
+        try {
+            for(int cpt = 1; cpt <= this.cloud.getProvider().getNumberOfManagementMachines(); cpt++){
+                VirtualBoxMachineInfo info = this.virtualBoxService.getInfo(serverNamePrefix+cpt);
+                this.virtualBoxService.stop(info.getGuid());
+                this.virtualBoxService.destroy(info.getGuid());
+            }
+        } catch (final Exception e) {
+            throw new CloudProvisioningException("Failed to shut down managememnt machines", e);
+        }
+    }
+
+    public String getCloudName() {
+        return this.cloud.getName();
+    }
+}

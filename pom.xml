@@ -1,0 +1,39 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<groupId>fr.fastconnect</groupId>
+	<artifactId>virtualbox-cloudify-driver</artifactId>
+	<version>1.0-SNAPSHOT</version>
+	<repositories>
+		<repository>
+			<id>org.cloudifysource</id>
+			<url>http://maven-repository.cloudifysource.org</url>
+		</repository>
+	</repositories>
+	<dependencies>
+		<dependency>
+			<groupId>org.cloudifysource</groupId>
+			<artifactId>esc</artifactId>
+			<version>${cloudifyVersion}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.cloudifysource</groupId>
+			<artifactId>dsl</artifactId>
+			<version>${cloudifyVersion}</version>
+		</dependency>
+		<dependency>
+			<groupId>dom4j</groupId>
+			<artifactId>dom4j</artifactId>
+			<version>1.6.1</version>
+		</dependency>
+		<dependency>
+			<groupId>com.jcraft</groupId>
+			<artifactId>jsch</artifactId>
+			<version>0.1.49</version>
+		</dependency>
+		
+	</dependencies>
+	<properties>
+		<cloudifyVersion>2.1.1</cloudifyVersion>
+	</properties>
+</project>
