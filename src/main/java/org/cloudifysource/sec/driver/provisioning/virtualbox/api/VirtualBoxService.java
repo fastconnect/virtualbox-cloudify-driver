@@ -10,14 +10,25 @@ import java.util.ArrayList;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.virtualbox_4_1.IMachine;
+import org.virtualbox_4_1.VirtualBoxManager;
+
 public class VirtualBoxService {
+    
+    private VirtualBoxManager virtualBoxManager;
     
     private Runtime runtime;
 
     public VirtualBoxService() {
         this.runtime = Runtime.getRuntime();
+        
+        this.virtualBoxManager = VirtualBoxManager.createInstance(null);
     }
 
+    public void connect(String url, String login, String password){
+        this.virtualBoxManager.connect(url, login, password);
+    }
+    
     public VirtualBoxMachineInfo[] getAll() throws IOException {
         return this.getAll(null);
     }
@@ -26,27 +37,10 @@ public class VirtualBoxService {
 
         ArrayList<VirtualBoxMachineInfo> result = new ArrayList<VirtualBoxMachineInfo>();
 
-        // Retrieve the existing VMs
-        Process process = runtime.exec(new String[] {
-                "VBoxManage",
-                "list",
-                "vms"
-        });
-
-        BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-        String line = null;
-        while ((line = reader.readLine()) != null) {
-            int firstQuote = line.indexOf("\"");
-            int secondQuote = line.indexOf("\"", firstQuote + 1);
-            String name = line.substring(firstQuote + 1, secondQuote);
-
-            int firstIndexGuid = line.indexOf("{", secondQuote + 1);
-            int secondIndexGuid = line.indexOf("}", firstIndexGuid + 1);
-            String guid = line.substring(firstIndexGuid + 1, secondIndexGuid);
-
+        for(IMachine m : this.virtualBoxManager.getVBox().getMachines()){
             VirtualBoxMachineInfo vboxInfo = new VirtualBoxMachineInfo();
-            vboxInfo.setGuid(guid);
-            vboxInfo.setMachineName(name);
+            vboxInfo.setGuid(m.getId());
+            vboxInfo.setMachineName(m.getName());
 
             if (prefix != null) {
                 if (vboxInfo.getMachineName().startsWith(prefix)) {
@@ -57,7 +51,7 @@ public class VirtualBoxService {
                 result.add(vboxInfo);
             }
         }
-
+        
         return result.toArray(new VirtualBoxMachineInfo[0]);
     }
 
