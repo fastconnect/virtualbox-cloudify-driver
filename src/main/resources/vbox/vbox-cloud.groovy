@@ -122,8 +122,7 @@ cloud {
 	 */
 	custom ([ 
 		"vbox.boxes.path" : "~/.vagrant.d/boxes/",
-        "vbox.hostonlyinterface.ip" : "192.168.12.1",
-        "vbox.hostonlyinterface.mask" : "255.255.255.0",
+        "vbox.hostonlyinterface" : "vboxnet2"
 		])
 }
 

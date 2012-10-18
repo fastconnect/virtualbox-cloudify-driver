@@ -2,6 +2,7 @@ package org.cloudifysource.sec.driver.provisioning.virtualbox;
 
 import java.io.IOException;
 
+import org.cloudifysource.sec.driver.provisioning.virtualbox.api.VirtualBoxException;
 import org.cloudifysource.sec.driver.provisioning.virtualbox.api.VirtualBoxMachineInfo;
 import org.cloudifysource.sec.driver.provisioning.virtualbox.api.VirtualBoxService;
 import org.junit.Test;
@@ -9,7 +10,7 @@ import org.junit.Test;
 public class VirtualBoxServiceTest {
 
     @Test
-    public void testGetAll() throws IOException{
+    public void testGetAll() throws IOException, VirtualBoxException{
         VirtualBoxService service = new VirtualBoxService();
         service.connect("http://localhost:18083","","");
         
@@ -18,3 +19,4 @@ public class VirtualBoxServiceTest {
         }
     }
 }
+

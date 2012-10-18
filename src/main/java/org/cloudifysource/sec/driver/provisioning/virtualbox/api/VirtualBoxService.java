@@ -1,32 +1,61 @@
 package org.cloudifysource.sec.driver.provisioning.virtualbox.api;
 
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileWriter;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.util.ArrayList;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.Arrays;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.logging.Level;
 
+import org.apache.commons.codec.binary.Base64;
+import org.apache.commons.lang.StringUtils;
+import org.virtualbox_4_1.CleanupMode;
+import org.virtualbox_4_1.Holder;
+import org.virtualbox_4_1.IAppliance;
+import org.virtualbox_4_1.IConsole;
+import org.virtualbox_4_1.IGuest;
+import org.virtualbox_4_1.IHostNetworkInterface;
 import org.virtualbox_4_1.IMachine;
+import org.virtualbox_4_1.INetworkAdapter;
+import org.virtualbox_4_1.IProgress;
+import org.virtualbox_4_1.ISession;
+import org.virtualbox_4_1.IVirtualSystemDescription;
+import org.virtualbox_4_1.ImportOptions;
+import org.virtualbox_4_1.MachineState;
+import org.virtualbox_4_1.NetworkAttachmentType;
+import org.virtualbox_4_1.VBoxException;
 import org.virtualbox_4_1.VirtualBoxManager;
+import org.virtualbox_4_1.VirtualSystemDescriptionType;
+import org.virtualbox_4_1.jaxws.InvalidObjectFaultMsg;
+import org.virtualbox_4_1.jaxws.RuntimeFaultMsg;
+import org.virtualbox_4_1.jaxws.VboxPortType;
+
 
 public class VirtualBoxService {
     
+    private static final java.util.logging.Logger logger = java.util.logging.Logger
+            .getLogger(VirtualBoxService.class.getName());
+    
+    private static final String cloudify_shared_folder = "cloudify";
+    
     private VirtualBoxManager virtualBoxManager;
     
-    private Runtime runtime;
-
+    private static final ReentrantLock mutex = new ReentrantLock();
+    
     public VirtualBoxService() {
-        this.runtime = Runtime.getRuntime();
-        
         this.virtualBoxManager = VirtualBoxManager.createInstance(null);
     }
 
-    public void connect(String url, String login, String password){
-        this.virtualBoxManager.connect(url, login, password);
+    public void connect(String url, String login, String password) throws VirtualBoxException{
+        try{
+            logger.log(Level.INFO, "Trying to connect to "+url+" using login: "+login);
+            this.virtualBoxManager.connect(url, login, password);
+        }
+        catch(Exception ex){
+            throw new VirtualBoxException("Unable to connect to "+url+" with login "+login, ex);
+        }
     }
     
     public VirtualBoxMachineInfo[] getAll() throws IOException {
@@ -65,179 +94,209 @@ public class VirtualBoxService {
         return null;
     }
 
-    public VirtualBoxMachineInfo create(String boxPath, String vmname, int cpus, int memory, String hostOnlyInterface) throws Exception {
+    @SuppressWarnings("restriction")
+    private void getDescription(VboxPortType port, String obj, Holder<List<org.virtualbox_4_1.VirtualSystemDescriptionType>> aTypes, Holder<List<String>> aRefs, Holder<List<String>> aOvfValues, Holder<List<String>> aVBoxValues, Holder<List<String>> aExtraConfigValues) {
+        try {
+            javax.xml.ws.Holder<List<org.virtualbox_4_1.jaxws.VirtualSystemDescriptionType>>   tmp_aTypes = new  javax.xml.ws.Holder<List<org.virtualbox_4_1.jaxws.VirtualSystemDescriptionType>>();            
+            javax.xml.ws.Holder<List<String>>   tmp_aRefs = new  javax.xml.ws.Holder<List<String>>();
+            javax.xml.ws.Holder<List<String>>   tmp_aOvfValues = new  javax.xml.ws.Holder<List<String>>();
+            javax.xml.ws.Holder<List<String>>   tmp_aVBoxValues = new  javax.xml.ws.Holder<List<String>>();
+            javax.xml.ws.Holder<List<String>>   tmp_aExtraConfigValues = new  javax.xml.ws.Holder<List<String>>();
+            port.iVirtualSystemDescriptionGetDescription(obj, tmp_aTypes, tmp_aRefs, tmp_aOvfValues, tmp_aVBoxValues, tmp_aExtraConfigValues);
+            
+            // this one is buggy
+            //aTypes.value = Helper.convertEnums(org.virtualbox_4_1.jaxws.VirtualSystemDescriptionType.class, org.virtualbox_4_1.VirtualSystemDescriptionType.class, tmp_aTypes.value);
+            aTypes.value = new ArrayList<VirtualSystemDescriptionType>();
+            for(org.virtualbox_4_1.jaxws.VirtualSystemDescriptionType tmp_t : tmp_aTypes.value){
+                VirtualSystemDescriptionType t = VirtualSystemDescriptionType.fromValue(tmp_t.value());
+                aTypes.value.add(t);
+            }
+            aRefs.value = tmp_aRefs.value;
+            aOvfValues.value = tmp_aOvfValues.value;
+            aVBoxValues.value = tmp_aVBoxValues.value;
+            aExtraConfigValues.value = tmp_aExtraConfigValues.value;
+         } catch (InvalidObjectFaultMsg e) {
+              throw new VBoxException(e, e.getMessage());
+         } catch (RuntimeFaultMsg e) {
+              throw new VBoxException(e, e.getMessage());
+         }
+    }
+    
+    public VirtualBoxMachineInfo create(String boxPath, String vmname, long cpus, long memory, String hostOnlyInterface, String hostSharedFolder) throws Exception {
 
+        logger.log(Level.INFO, "Trying to create VM '"+vmname+"' cpus:"+cpus+" memory:"+memory+" from template: "+boxPath);
+        
         File boxPathFile = new File(boxPath);
 
-        if (boxPath.startsWith("~")) {
-            boxPath = boxPath.substring(1);
-            File home = new File(System.getProperty("user.home"));
-            boxPathFile = new File(home, boxPath);
+        IAppliance appliance = this.virtualBoxManager.getVBox().createAppliance();
+        appliance.read(boxPathFile.getAbsolutePath());
+        appliance.interpret();
+        
+        IVirtualSystemDescription virtualSystemDescription = appliance.getVirtualSystemDescriptions().get(0);
+        
+        Holder<List<VirtualSystemDescriptionType>> types = new Holder<List<VirtualSystemDescriptionType>>();
+        Holder<List<String>> refs = new Holder<List<String>>();
+        Holder<List<String>> ovfValues = new Holder<List<String>>();
+        Holder<List<String>> vBoxValues = new Holder<List<String>>();
+        Holder<List<String>> extraConfigValues = new Holder<List<String>>();
+
+        // there is a bug in the vboxws function: it's unable to convert the WS Enums, so do it manually
+        // virtualSystemDescription.getDescription(types, refs, ovfValues, vBoxValues, extraConfigValues);
+        getDescription(appliance.getRemoteWSPort(), virtualSystemDescription.getWrapped(), types, refs, ovfValues, vBoxValues, extraConfigValues);
+
+
+        List<Boolean> enabled = new ArrayList<Boolean>();
+        for(int cpt = 0; cpt < vBoxValues.value.size(); cpt++){
+            if(types.value.get(cpt) == VirtualSystemDescriptionType.Name){
+                vBoxValues.value.set(cpt, vmname);
+            }
+            enabled.add(true);
         }
 
-        ArrayList<String> options = new ArrayList<String>();
-        options.add("VBoxManage");
-        options.add("import");
-        options.add(boxPathFile.getAbsolutePath());
-        options.add("--vsys");
-        options.add("0");
-        options.add("--vmname");
-        options.add(vmname);
-        if (cpus > 0) {
-            options.add("--cpus");
-            options.add(Integer.toString(cpus));
-        }
-        if (memory > 0) {
-            options.add("--memory");
-            options.add(Integer.toString(memory));
-        }
-
-        Process process = runtime.exec(options.toArray(new String[0]));
-
-        // read output to detect "Successfully imported the appliance"
-        String[] outputs = getOutputs(process);
-
-        if (process.waitFor() > 0) {
-            throw new Exception("Unable to import VM:\nstdout:\n" + outputs[0] + "\nstderr:\n" + outputs[1]);
-        }
-
-        VirtualBoxMachineInfo info = getInfo(vmname);
-
-        // configure the VM to use NAT for the first network interface
-        process = runtime.exec(new String[] {
-                "VBoxManage",
-                "modifyvm",
-                info.getGuid(),
-                "--nic1",
-                "nat"
-        });
-
-        outputs = getOutputs(process);
-        if (process.waitFor() > 0) {
-            throw new Exception("Unable to set the network interface:\nstdout:\n" + outputs[0] + "\nstderr:\n" + outputs[1]);
-        }
-
-        process = runtime.exec(new String[] {
-                "VBoxManage",
-                "modifyvm",
-                info.getGuid(),
-                "--natnet1",
-                "default"
-        });
-
-        outputs = getOutputs(process);
-        if (process.waitFor() > 0) {
-            throw new Exception("Unable to set the network interface:\nstdout:\n" + outputs[0] + "\nstderr:\n" + outputs[1]);
+        virtualSystemDescription.setFinalValues(enabled, vBoxValues.value, extraConfigValues.value);
+        
+        IProgress progress = appliance.importMachines(Arrays.asList(new ImportOptions[0]));
+        progress.waitForCompletion(60*1000);
+        
+        if(!progress.getCompleted()){
+            throw new VirtualBoxException("Unable to import VM: Timeout");   
         }
         
-        // configure the VM to use HostOnly for the second network interface
-        process = runtime.exec(new String[] {
-                "VBoxManage",
-                "modifyvm",
-                info.getGuid(),
-                "--nic2",
-                "hostonly"
-        });
-
-        outputs = getOutputs(process);
-        if (process.waitFor() > 0) {
-            throw new Exception("Unable to set the network interface:\nstdout:\n" + outputs[0] + "\nstderr:\n" + outputs[1]);
+        if(progress.getResultCode() != 0){
+            throw new VirtualBoxException("Unable to import VM: "+progress.getErrorInfo().getText());
         }
-
-        process = runtime.exec(new String[] {
-                "VBoxManage",
-                "modifyvm",
-                info.getGuid(),
-                "--hostonlyadapter2",
-                hostOnlyInterface
-        });
-
-        outputs = getOutputs(process);
-        if (process.waitFor() > 0) {
-            throw new Exception("Unable to set the network interface:\nstdout:\n" + outputs[0] + "\nstderr:\n" + outputs[1]);
-        }
-
         
-        return info;
+        String machineName = appliance.getMachines().get(0);
+        
+        IMachine machine = virtualBoxManager.getVBox().findMachine(machineName);
+        
+        mutex.lock();
+        ISession session = virtualBoxManager.openMachineSession(machine);
+        machine = session.getMachine(); // needed?
+        
+        VirtualBoxMachineInfo result = new VirtualBoxMachineInfo();
+        result.setGuid(machine.getId());
+        result.setMachineName(vmname);
+        
+        try{
+            machine.setName(vmname);
+            machine.setCPUCount(cpus);
+            machine.setMemorySize(memory);
+            
+            INetworkAdapter nic1 = machine.getNetworkAdapter(0l);
+            nic1.setNATNetwork("default");
+            nic1.setAttachmentType(NetworkAttachmentType.NAT);
+            nic1.setEnabled(true);
+            
+            INetworkAdapter nic2 = machine.getNetworkAdapter(1l);
+            nic2.setAttachmentType(NetworkAttachmentType.HostOnly);
+            nic2.setHostOnlyInterface(hostOnlyInterface);
+            nic2.setEnabled(true);
+            
+            machine.createSharedFolder(cloudify_shared_folder, hostSharedFolder, true, true);
+            
+            machine.saveSettings();
+        }
+        finally{
+            this.virtualBoxManager.closeMachineSession(session);
+            mutex.unlock();
+        }
+        
+        return result;
     }
 
     public void destroy(String machineGuid) throws Exception {
-        Process process = runtime.exec(new String[] {
-                "VBoxManage",
-                "unregistervm",
-                machineGuid,
-                "--delete"
-        });
-
-        String[] outputs = getOutputs(process);
-        if (process.waitFor() > 0) {
-            throw new Exception("Unable to set stop machine:\nstdout:\n" + outputs[0] + "\nstderr:\n" + outputs[1]);
+        logger.log(Level.INFO, "Trying to destroy VM '"+machineGuid+"'");
+        
+        IMachine m = virtualBoxManager.getVBox().findMachine(machineGuid);
+        
+        mutex.lock();
+        ISession session = virtualBoxManager.openMachineSession(m);
+        m = session.getMachine();
+        
+        try{
+            m.unregister(CleanupMode.Full);
         }
+        finally{
+            this.virtualBoxManager.closeMachineSession(session);
+            mutex.unlock();
+        }
+        
     }
 
     public void start(String machineGuid, String login, String password, String host, boolean headless) throws Exception {
         
-        ArrayList<String> startOptions = new ArrayList<String>();
-        startOptions.add("VBoxManage");
-        startOptions.add("startvm");
-        startOptions.add(machineGuid);
+        logger.log(Level.INFO, "Trying to start and setup VM '"+machineGuid+"'");
         
-        if(headless){
-            startOptions.add("--type");
-            startOptions.add("headless");
+        // start the VM
+        boolean started = virtualBoxManager.startVm(machineGuid, headless ? "headless" : "gui", 60*1000);
+        if(!started){
+            throw new VirtualBoxException("Unable to start VM:");
         }
         
-        Process process = runtime.exec(startOptions.toArray(new String[0]));
-
-        // read output to detect error
-        String[] outputs = getOutputs(process);
-        if (process.waitFor() > 0) {
-            throw new Exception("Unable to set start machine:\nstdout:\n" + outputs[0] + "\nstderr:\n" + outputs[1]);
-        }
-        
-        boolean ready = false;
+        // wait for the guest OS to be ready
         int nbTry = 0;
+        boolean isReady = false;
         do{
             nbTry++;
-            
-            // wait for guest to be ready
-            process = runtime.exec(new String[] {
-                    "VBoxManage",
-                    "guestcontrol",
-                    machineGuid,
-                    "exec",
-                    "/bin/ls",
-                    "--username",
-                    login,
-                    "--password",
-                    password,
-                    "--wait-exit",
-                    "--wait-stdout",
-                    "--wait-stderr"
-            });
-    
-            outputs = getOutputs(process);
-            ready = process.waitFor() == 0;
-            
-            if(!ready){
-                Thread.sleep(5000);
+            try{
+                executeCommand(machineGuid, login, password, "/bin/ls",Arrays.asList(new String[0]), Arrays.asList(new String[0]));
+                
+                isReady = true;
+            }
+            catch(Exception ex){
+                // TODO: log
             }
             
-        } while (!ready && nbTry <= 10);
+            if(!isReady){
+                Thread.sleep(5*1000);
+            }
+        }while(!isReady && nbTry < 10);
         
-        if(!ready){
-            throw new Exception("Unable to execute script on machine "+machineGuid+" because it's not yet ready:\nstdout:\n" + outputs[0] + "\nstderr:\n" + outputs[1]);
+        if(!isReady){
+            throw new VirtualBoxException("Timeout while waiting guest to be ready");
         }
-
+        
+        // add the current user to the group vboxsf to read the shared folder
+        String addUserScript = "#!/bin/bash\n"+
+                "sudo usermod -a -G vboxsf $(whoami)";
+        
+        this.executeScript(machineGuid, login, password, "adduser.sh", addUserScript);
+        
+        // wait for mount of shared folder
+        nbTry = 0;
+        isReady = false;
+        do{
+            nbTry++;
+            try{
+                executeCommand(machineGuid, login, password, "/bin/ls",Arrays.asList("/media/sf_"+cloudify_shared_folder), Arrays.asList(new String[0]));
+                
+                isReady = true;
+            }
+            catch(Exception ex){
+                // TODO: log
+            }
+            
+            if(!isReady){
+                Thread.sleep(5*1000);
+            }
+        }while(!isReady && nbTry < 10);
+        
+        if(!isReady){
+            throw new VirtualBoxException("Timeout while waiting shared folder to be ready");
+        }
+        
         // create a script to update the hostname
         String updatehostnameContent = "#!/bin/bash\n"+
                 "sudo sed -i s/.*$/" + host + "/ /etc/hostname\n" +
                 "sudo service hostname start";
-
-        this.executeScript(machineGuid, login, password, "updatehostname.sh", "/tmp/updatehostname.sh", updatehostnameContent);
+        
+        this.executeScript(machineGuid, login, password, "updatehostname.sh", updatehostnameContent);
     }
     
     public void updateNetworkingInterfaces(String machineGuid, String login, String password, String ip, String mask) throws Exception {
+        
+        logger.log(Level.INFO, "Trying to update network interfaces on VM '"+machineGuid+"'");
         
         // create the new /etc/network/interfaces file, and copy to guest
         String interfacesContent = "auto lo\n"+
@@ -249,275 +308,240 @@ public class VirtualBoxService {
                 "address "+ip+"\n"+
                 "netmask "+mask+"\n";
         
-        this.copyFile(machineGuid, login, password, "interfaces", "/tmp/interfaces", interfacesContent);
+        this.createFile(machineGuid, login, password, "/tmp/interfaces", interfacesContent);
         
         // create the script to update the interfaces file, and copy it to the guest        
         String updateinterfacesContent = "#!/bin/bash\n"+
                 "cat /tmp/interfaces | sudo tee /etc/network/interfaces\n"+
                 "sudo /etc/init.d/networking restart";  
         
-        this.executeScript(machineGuid, login, password, "updateinterfaces.sh", "/tmp/updateinterfaces.sh", updateinterfacesContent);
+        this.executeScript(machineGuid, login, password, "updateinterfaces.sh", updateinterfacesContent);
     }
 
     public void updateHosts(String machineGuid, String login, String password, String hosts) throws InterruptedException, Exception {
 
+        logger.log(Level.INFO, "Trying to update hosts on VM '"+machineGuid+"'");
+        
         // create the new /etc/hosts file, and copy to guest
-        this.copyFile(machineGuid, login, password, "hosts", "/tmp/hosts", hosts);
+        this.createFile(machineGuid, login, password, "/tmp/hosts", hosts);
         
         // create the script to update the interfaces file, and copy it to the guest
         String updatehostsScript = "#!/bin/bash\n"+
-                "cat /tmp/hosts | sudo tee /etc/hosts\n";
+                "cat "+"/tmp/hosts"+" | sudo tee /etc/hosts\n";
         
-        this.executeScript(machineGuid, login, password, "updatehosts.sh", "/tmp/updatehosts.sh", updatehostsScript);
+        this.executeScript(machineGuid, login, password, "updatehosts.sh", updatehostsScript);
     }
 
     public void stop(String machineGuid) throws Exception {
-        Process process = runtime.exec(new String[] {
-                "VBoxManage",
-                "controlvm",
-                machineGuid,
-                "poweroff"
-        });
-
-        String[] outputs = getOutputs(process);
-        if (process.waitFor() > 0) {
-            throw new Exception("Unable to stop the machine "+machineGuid+":\nstdout:\n" + outputs[0] + "\nstderr:\n" + outputs[1]);
-        }
         
-        Pattern pattern = Pattern.compile("VMState=\"(.*)\"");
-        boolean off = false;
-        int nbTry = 0;
-        do{
-            nbTry++;
+        logger.log(Level.INFO, "Trying to stop VM '"+machineGuid+"'");
+        
+        IMachine m = virtualBoxManager.getVBox().findMachine(machineGuid);
+        
+        mutex.tryLock(3,  TimeUnit.MINUTES);
+        ISession session = virtualBoxManager.openMachineSession(m);
+        IConsole console = session.getConsole();
+        m = session.getMachine();
+        
+        try{
+            IProgress progress = console.powerDown();
             
-            // wait for guest to be ready
-            process = runtime.exec(new String[] {
-                "VBoxManage",
-                "showvminfo",
-                machineGuid,
-                "--machinereadable"
-            });
-    
-            outputs = getOutputs(process);
-            if(process.waitFor() > 0){
-                throw new Exception("Unable to execute check status of machine "+machineGuid+" :\nstdout:\n" + outputs[0] + "\nstderr:\n" + outputs[1]);
+            progress.waitForCompletion(60*1000);
+            
+            if(!progress.getCompleted()){
+                throw new VirtualBoxException("Unable to shutdown vm "+machineGuid+": Timeout");
             }
             
-            String[] lines = outputs[0].split("\n");
-            for(String line : lines){
-                Matcher matcher = pattern.matcher(line);
-                if(matcher.find()){
-                    String status = matcher.group(1);
-                    off = status.equals("poweroff");
-                    break;
+            if(progress.getResultCode() != 0){
+                throw new VirtualBoxException("Unable to shutdown vm "+machineGuid+": "+progress.getErrorInfo().getText());
+            }
+            
+            int nbTry = 0;
+            boolean off = false;
+            do{
+                nbTry++;
+                
+                off = m.getState() == MachineState.PoweredOff;
+                
+                if(!off){
+                    Thread.sleep(5*1000);
                 }
             }
+            while(!off && nbTry < 10);
             
             if(!off){
-                Thread.sleep(5000);
-            }
-            
-        } while (!off && nbTry <= 10);
-        
-        if(!off){
-            throw new Exception("Unable to execute script on machine "+machineGuid+" because it's not yet ready:\nstdout:\n" + outputs[0] + "\nstderr:\n" + outputs[1]);
-        }
-    }
-
-    public String existsHostOnlyInterface(
-            String hostonlyifIP,
-            String hostonlyifMask) throws InterruptedException, Exception {
-
-        // Retrieve the existing VMs
-        Process process = runtime.exec(new String[] {
-                "VBoxManage",
-                "list",
-                "hostonlyifs"
-        });
-        
-        String[] outputs = getOutputs(process);
-        if (process.waitFor() > 0) {
-            throw new Exception("Unable to create Host Only Interface:\nstdout:\n" + outputs[0] + "\nstderr:\n" + outputs[1]);
-        }
-        
-        Pattern patternName = Pattern.compile("Name: *(.*)");
-        Pattern patternIP = Pattern.compile("IPAddress: *(.*)");
-        Pattern patternMask = Pattern.compile("NetworkMask: *(.*)");
-
-        String stdout = outputs[0];
-        String[] stdoutLines = stdout.split("\n");
-        for(int cpt = 0; cpt < stdoutLines.length; cpt++) {
-            String line = stdoutLines[cpt];
-            
-            if (line.startsWith("Name:")) {
-                Matcher matcher = patternName.matcher(line);
-                matcher.find();
-                String name = matcher.group(1);
-                
-                cpt += 3;
-                line = stdoutLines[cpt];
-                
-                matcher = patternIP.matcher(line);
-                matcher.find();
-                String ip = matcher.group(1);
-                
-                cpt += 1;
-                line = stdoutLines[cpt];
-                
-                matcher = patternMask.matcher(line);
-                matcher.find();
-                String mask = matcher.group(1);
-                
-                if (ip.equals(hostonlyifIP) && mask.equals(hostonlyifMask)) {
-                    return name;
-                }
+                throw new VirtualBoxException("Unable to shutdown vm "+machineGuid+": Timeout");
             }
         }
-
-        return null;
-    }
-
-    public String createHostOnlyInterface(String hostonlyifIP, String hostonlyifMask) throws Exception {
-
-        String interfaceName = "";
-
-        Process process = runtime.exec(new String[] {
-                "VBoxManage",
-                "hostonlyif",
-                "create"
-        });
-        
-        String[] outputs = getOutputs(process);
-        
-        if (process.waitFor() > 0) {
-            throw new Exception("Unable to create Host Only Interface:\nstdout:\n" + outputs[0] + "\nstderr:\n" + outputs[1]);
+        finally{
+            virtualBoxManager.closeMachineSession(session);
+            mutex.unlock();
         }
-
-        String stdout = outputs[0];
-        String[] stdoutSplit = stdout.split("\n");
-        String lastLine = stdoutSplit[stdoutSplit.length-1];
-        
-        Pattern pattern = Pattern.compile("Interface '([^']*)' was successfully created");
-        Matcher matcher = pattern.matcher(lastLine);
-
-        if(!matcher.find()){
-            throw new Exception("Unable to analyze output of creation of the Host Only Intereface");
-        }
-        
-        interfaceName = matcher.group(1);
-        
-        process = runtime.exec(new String[] {
-                "VBoxManage",
-                "hostonlyif",
-                "ipconfig",
-                interfaceName,
-                "--ip",
-                hostonlyifIP,
-                "--netmask",
-                hostonlyifMask
-        });
-        
-        outputs = getOutputs(process);
-        if (process.waitFor() > 0) {
-            throw new Exception("Unable to configure Host Only Interface:\nstdout:\n" + outputs[0] + "\nstderr:\n" + outputs[1]);
-        }
-        
-        return interfaceName;
-    }
-
-    public String[] getOutputs(Process process) throws IOException {
-        BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-        String allLines = "";
-        String line = null;
-
-        while ((line = reader.readLine()) != null) {
-            allLines += line + "\n";
-        }
-
-        String errorLines = "";
-        reader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
-        while ((line = reader.readLine()) != null) {
-            errorLines += line + "\n";
-        }
-
-        return new String[] { allLines, errorLines };
     }
     
-    private void copyFile(String machineGuid, String login, String password, String filename, String destination, String content) throws Exception{
-        // create the new /etc/hosts file, and copy to guest
-        File file = new File(new File(System.getProperty("java.io.tmpdir")), filename);
-
-        BufferedWriter writer = new BufferedWriter(new FileWriter(file));
-        writer.write(content);
-        writer.close();
-
-        Process process = runtime.exec(new String[] {
-                "VBoxManage",
-                "guestcontrol",
+    private void createFile(String machineGuid, String login, String password, String destination, String content) throws Exception{
+        
+        logger.log(Level.INFO, "Trying to create file '"+destination+"' on machine '"+machineGuid+"'");
+        
+        // ultra hack: VirtualBox has a 'fileCreate' function, but not in the WS API
+        // it's not possible to use '>' or '|' with "/bin/bash" command
+        // and the content of the file could have special chars for bash
+        // so the hack is to copy an existing file, change it with sed with a base64 content to avoid special chars
+        // and decode it with openssl
+        
+        byte[] bytes = Base64.encodeBase64((content+"\n").getBytes());
+        
+        // openssl has a limit for each line in base64
+        // should be 76 but seems that sometimes it's not working
+        final int maxBase64lenght = 60;
+        String base64 = new String(bytes);
+        int linesNumber = base64.length() / maxBase64lenght;
+        if((base64.length() % maxBase64lenght) > 0){
+            linesNumber++;
+        }
+        
+        List<String> builder = new ArrayList<String>();
+        
+        for(int cpt = 0; cpt < linesNumber; cpt++){
+            if(cpt == linesNumber-1){
+                builder.add(base64.substring(cpt*maxBase64lenght, base64.length()));   
+            }
+            else {
+                builder.add(base64.substring(cpt*maxBase64lenght, (cpt+1)*maxBase64lenght));   
+            }
+        }
+        
+        // copy a file
+        this.executeCommand(
                 machineGuid,
-                "copyto",
-                file.getAbsolutePath(),
-                destination,
-                "--username",
-                login,
-                "--password",
+                login, 
                 password,
-        });
+                "/bin/cp", 
+                Arrays.asList("/etc/hostname", destination+".base64"),
+                Arrays.asList(new String[0]));
         
-        String[] outputs = getOutputs(process);
-        if (process.waitFor() > 0) {
-            throw new Exception("Unable to copy file "+filename+" to "+destination+":\nstdout:\n" + outputs[0] + "\nstderr:\n" + outputs[1]);
+        // replace all chars by the base64
+        // because the base64 can be too big, append each lines to the file
+     
+        // create a first "markup"
+        this.executeCommand(
+                machineGuid,
+                login, 
+                password,
+                "/bin/sed", 
+                Arrays.asList("-i", "s/.*/:/g", destination+".base64"),
+                Arrays.asList(new String[0]));
+        
+        for(String line : builder){
+            this.executeCommand(
+                    machineGuid,
+                    login, 
+                    password,
+                    "/bin/sed", 
+                    Arrays.asList("-i", "'s/:/\\n"+line+":/'", destination+".base64"),
+                    Arrays.asList(new String[0]));
         }
+        
+        // replace the final ':' by a new line
+        this.executeCommand(
+                machineGuid,
+                login, 
+                password,
+                "/bin/sed", 
+                Arrays.asList("-i", "s/:/\\n/g", destination+".base64"),
+                Arrays.asList(new String[0]));
+        
+        // convert the base64 file with openssl
+        this.executeCommand(
+                machineGuid,
+                login, 
+                password,
+                "/usr/bin/openssl", 
+                Arrays.asList("enc", "-base64", "-d", "-base64", "-in", destination+".base64", "-out", destination),
+                Arrays.asList(new String[0]));
+        
+        // remove the base64 file
+//        this.executeCommand(
+//                machineGuid,
+//                login, 
+//                password,
+//                "/bin/rm", 
+//                Arrays.asList(destination+".base64"),
+//                Arrays.asList(new String[0]));
     }
     
-    private void executeScript(String machineGuid, String login, String password, String filename, String destination, String content) throws Exception {
+    private void executeScript(String machineGuid, String login, String password, String filename, String content) throws Exception {
         
         // copy the file
-        this.copyFile(machineGuid, login, password, filename, destination, content);
+        this.createFile(machineGuid, login, password, "/tmp/"+filename, content);
         
-        // chmod
-        Process process = runtime.exec(new String[] {
-                "VBoxManage",
-                "guestcontrol",
-                machineGuid,
-                "exec",
-                "/bin/chmod",
-                "--username",
-                login,
-                "--password",
-                password,
-                "--wait-exit",
-                "--wait-stdout",
-                "--wait-stderr",
-                "--",
-                "a+x",
-                destination
-        });
+        logger.log(Level.INFO, "Trying to execute file '"+"/tmp/"+filename+"' on VM '"+machineGuid+"'");
         
-        String[] outputs = getOutputs(process);
-        if (process.waitFor() > 0) {
-            throw new Exception("Unable to set chmod +x for file "+destination+":\nstdout:\n" + outputs[0] + "\nstderr:\n" + outputs[1]);
-        }
+        this.executeCommand(machineGuid, login, password, "/bin/chmod", Arrays.asList("a+x","/tmp/"+filename), Arrays.asList(new String[0]));
+        this.executeCommand(machineGuid, login, password, "/tmp/"+filename, Arrays.asList(new String[0]), Arrays.asList(new String[0]));
+    }
 
-        // execute it
-        process = runtime.exec(new String[] {
-                "VBoxManage",
-                "guestcontrol",
-                machineGuid,
-                "exec",
-                destination,
-                "--username",
-                login,
-                "--password",
-                password,
-                "--wait-exit",
-                "--wait-stdout",
-                "--wait-stderr"
-        });
+    private long executeCommand(String machineGuid, String login, String password, String command, List<String> args, List<String> envs) throws Exception {
         
-        outputs = getOutputs(process);
-        if (process.waitFor() > 0) {
-            throw new Exception("Unable to execute "+destination+":\nstdout:\n" + outputs[0] + "\nstderr:\n" + outputs[1]);
+        logger.log(Level.INFO, "Trying to execute command on machine '"+machineGuid+"': "+command+" "+StringUtils.join(args, ' ')+"");
+        
+        IMachine m = virtualBoxManager.getVBox().findMachine(machineGuid);
+        
+        mutex.lock();
+        
+        ISession session = virtualBoxManager.openMachineSession(m);
+        IConsole console = session.getConsole();
+        IGuest guest = console.getGuest();
+        
+        m = session.getMachine();
+        
+        
+        try{
+            
+            Holder<Long> pid = new Holder<Long>();
+            IProgress progress = guest.executeProcess(
+                    command, 
+                    0l,
+                    args, 
+                    envs,
+                    login,
+                    password, 
+                    60l*1000l,
+                    pid);
+            
+            progress.waitForCompletion(60*1000);
+            
+            if(!progress.getCompleted()){
+                throw new VirtualBoxException("Unable to execute command '"+command+" "+StringUtils.join(args, ' ')+"': Timeout");
+            }
+            
+            if(progress.getResultCode() != 0){
+                throw new VirtualBoxException("Unable to execute command '"+command+" "+StringUtils.join(args, ' ')+"': ResultCode "+progress.getResultCode());
+            }
+            
+            String output = new String(guest.getProcessOutput(pid.value, 0l, 60l*1000, 1024l));
+            
+            logger.log(Level.INFO, output);
+            
+            return pid.value;
         }
+        finally{
+            this.virtualBoxManager.closeMachineSession(session);
+            mutex.unlock();
+        }
+    }
+    
+    public VirtualBoxHostOnlyInterface getHostOnlyInterface(String hostonlyifName) {
+        
+        for(IHostNetworkInterface hostonlyif : this.virtualBoxManager.getVBox().getHost().getNetworkInterfaces()){
+            if(hostonlyif.getName().equals(hostonlyifName)){
+                VirtualBoxHostOnlyInterface result = new VirtualBoxHostOnlyInterface();
+                result.setIp(hostonlyif.getIPAddress());
+                result.setMask(hostonlyif.getNetworkMask());
+                return result;
+            }
+        }
+        
+        return null;
     }
 }
