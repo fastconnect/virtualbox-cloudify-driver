@@ -4,12 +4,26 @@
 	<groupId>fr.fastconnect</groupId>
 	<artifactId>virtualbox-cloudify-driver</artifactId>
 	<version>1.0-SNAPSHOT</version>
+	
+	<properties>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<cloudifyVersion>2.1.1</cloudifyVersion>
+	</properties>
+	
 	<repositories>
 		<repository>
 			<id>org.cloudifysource</id>
 			<url>http://maven-repository.cloudifysource.org</url>
 		</repository>
 	</repositories>
+
+	<distributionManagement>
+		<repository>
+			<id>repo.opensource.fastconnect.org</id>
+			<url>http://opensource.fastconnect.org/maven/content/repositories/opensource</url>
+		</repository>
+	</distributionManagement>
+	
 	<dependencies>
 		<dependency>
 			<groupId>org.cloudifysource</groupId>
@@ -48,7 +62,18 @@
 			<scope>test</scope>
 		</dependency>
 	</dependencies>
-	<properties>
-		<cloudifyVersion>2.1.1</cloudifyVersion>
-	</properties>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-compiler-plugin</artifactId>
+				<version>2.3.2</version>
+				<configuration>
+					<source>1.5</source>
+					<target>1.5</target>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
 </project>
