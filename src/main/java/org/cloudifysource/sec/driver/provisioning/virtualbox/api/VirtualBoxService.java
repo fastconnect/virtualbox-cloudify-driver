@@ -7,6 +7,8 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Level;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.lang.StringUtils;
@@ -17,6 +19,7 @@ import org.virtualbox_4_1.IConsole;
 import org.virtualbox_4_1.IGuest;
 import org.virtualbox_4_1.IHostNetworkInterface;
 import org.virtualbox_4_1.IMachine;
+import org.virtualbox_4_1.IMedium;
 import org.virtualbox_4_1.INetworkAdapter;
 import org.virtualbox_4_1.IProgress;
 import org.virtualbox_4_1.ISession;
@@ -175,6 +178,7 @@ public class VirtualBoxService {
         mutex.lock();
         try {
             ISession session = virtualBoxManager.openMachineSession(machine);
+            machine = session.getMachine();
             
             try{
                 machine.setName(vmname);
@@ -213,16 +217,30 @@ public class VirtualBoxService {
         
         IMachine m = virtualBoxManager.getVBox().findMachine(machineGuid);
         
+        Pattern errorMessagePattern = Pattern.compile("Cannot unregister the machine '[^']*' while it is locked \\(0x80BB0007\\)");
+        
         mutex.lock();
         try{
-            //ISession session = virtualBoxManager.openMachineSession(m);
-            
-            try{
-                m.unregister(CleanupMode.Full);
-            }
-            finally{
-                //this.virtualBoxManager.closeMachineSession(session);
-            }
+
+            int nbTry = 0;
+            boolean removed = false;
+            do{
+                nbTry++;
+                try{
+                    List<IMedium> mediums = m.unregister(CleanupMode.Full);
+                    m.delete(mediums);
+                    removed = true;
+                }
+                catch(VBoxException ex){
+                    Matcher matcher = errorMessagePattern.matcher(ex.getMessage());
+                    if(matcher.find()){
+                        Thread.sleep(5*1000);
+                    }
+                    else{
+                        throw ex;
+                    }
+                }
+            }while(!removed && nbTry < 10);
         }
         finally{
             mutex.unlock();
@@ -340,6 +358,7 @@ public class VirtualBoxService {
         try{
             
             ISession session = virtualBoxManager.openMachineSession(m);
+            m = session.getMachine();
             IConsole console = session.getConsole();
             
             try{
@@ -514,6 +533,7 @@ public class VirtualBoxService {
         
         try{
             ISession session = virtualBoxManager.openMachineSession(m);
+            m = session.getMachine();
             IConsole console = session.getConsole();
             IGuest guest = console.getGuest();
             
