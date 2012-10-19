@@ -1,4 +1,4 @@
-Run VirtualBox WebService first.
+Run VirtualBox WebService first on the IP of the "HostOnlyInterface" you want to use.
 Ex:
 $ VBoxManage setproperty websrvauthlibrary null
 $ vboxwebsrv
