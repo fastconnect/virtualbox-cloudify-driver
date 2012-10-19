@@ -5,7 +5,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Level;
 
@@ -169,36 +168,40 @@ public class VirtualBoxService {
         String machineName = appliance.getMachines().get(0);
         
         IMachine machine = virtualBoxManager.getVBox().findMachine(machineName);
-        
-        mutex.lock();
-        ISession session = virtualBoxManager.openMachineSession(machine);
-        machine = session.getMachine(); // needed?
-        
         VirtualBoxMachineInfo result = new VirtualBoxMachineInfo();
         result.setGuid(machine.getId());
         result.setMachineName(vmname);
         
-        try{
-            machine.setName(vmname);
-            machine.setCPUCount(cpus);
-            machine.setMemorySize(memory);
+        mutex.lock();
+        try {
+            ISession session = virtualBoxManager.openMachineSession(machine);
             
-            INetworkAdapter nic1 = machine.getNetworkAdapter(0l);
-            nic1.setNATNetwork("default");
-            nic1.setAttachmentType(NetworkAttachmentType.NAT);
-            nic1.setEnabled(true);
-            
-            INetworkAdapter nic2 = machine.getNetworkAdapter(1l);
-            nic2.setAttachmentType(NetworkAttachmentType.HostOnly);
-            nic2.setHostOnlyInterface(hostOnlyInterface);
-            nic2.setEnabled(true);
-            
-            machine.createSharedFolder(cloudify_shared_folder, hostSharedFolder, true, true);
-            
-            machine.saveSettings();
+            try{
+                machine.setName(vmname);
+                machine.setCPUCount(cpus);
+                machine.setMemorySize(memory);
+                
+                INetworkAdapter nic1 = machine.getNetworkAdapter(0l);
+                nic1.setNATNetwork("default");
+                nic1.setAttachmentType(NetworkAttachmentType.NAT);
+                nic1.setEnabled(true);
+                
+                INetworkAdapter nic2 = machine.getNetworkAdapter(1l);
+                nic2.setAttachmentType(NetworkAttachmentType.HostOnly);
+                nic2.setHostOnlyInterface(hostOnlyInterface);
+                nic2.setEnabled(true);
+                
+                if(hostSharedFolder != null && hostSharedFolder.length() > 0){
+                    machine.createSharedFolder(cloudify_shared_folder, hostSharedFolder, true, true);
+                }
+                
+                machine.saveSettings();
+            }
+            finally{
+                this.virtualBoxManager.closeMachineSession(session);
+            }
         }
-        finally{
-            this.virtualBoxManager.closeMachineSession(session);
+        finally {
             mutex.unlock();
         }
         
@@ -211,20 +214,22 @@ public class VirtualBoxService {
         IMachine m = virtualBoxManager.getVBox().findMachine(machineGuid);
         
         mutex.lock();
-        ISession session = virtualBoxManager.openMachineSession(m);
-        m = session.getMachine();
-        
         try{
-            m.unregister(CleanupMode.Full);
+            //ISession session = virtualBoxManager.openMachineSession(m);
+            
+            try{
+                m.unregister(CleanupMode.Full);
+            }
+            finally{
+                //this.virtualBoxManager.closeMachineSession(session);
+            }
         }
         finally{
-            this.virtualBoxManager.closeMachineSession(session);
             mutex.unlock();
         }
-        
     }
 
-    public void start(String machineGuid, String login, String password, String host, boolean headless) throws Exception {
+    public void start(String machineGuid, String login, String password, boolean headless) throws Exception {
         
         logger.log(Level.INFO, "Trying to start and setup VM '"+machineGuid+"'");
         
@@ -233,6 +238,8 @@ public class VirtualBoxService {
         if(!started){
             throw new VirtualBoxException("Unable to start VM:");
         }
+        
+        // TODO: do it in another way with Windows OS
         
         // wait for the guest OS to be ready
         int nbTry = 0;
@@ -257,46 +264,30 @@ public class VirtualBoxService {
             throw new VirtualBoxException("Timeout while waiting guest to be ready");
         }
         
-        // add the current user to the group vboxsf to read the shared folder
-        String addUserScript = "#!/bin/bash\n"+
-                "sudo usermod -a -G vboxsf $(whoami)";
-        
-        this.executeScript(machineGuid, login, password, "adduser.sh", addUserScript);
-        
-        // wait for mount of shared folder
-        nbTry = 0;
-        isReady = false;
-        do{
-            nbTry++;
-            try{
-                executeCommand(machineGuid, login, password, "/bin/ls",Arrays.asList("/media/sf_"+cloudify_shared_folder), Arrays.asList(new String[0]));
-                
-                isReady = true;
-            }
-            catch(Exception ex){
-                // TODO: log
-            }
-            
-            if(!isReady){
-                Thread.sleep(5*1000);
-            }
-        }while(!isReady && nbTry < 10);
-        
-        if(!isReady){
-            throw new VirtualBoxException("Timeout while waiting shared folder to be ready");
-        }
+        IMachine machine = this.virtualBoxManager.getVBox().findMachine(machineGuid);
         
         // create a script to update the hostname
         String updatehostnameContent = "#!/bin/bash\n"+
-                "sudo sed -i s/.*$/" + host + "/ /etc/hostname\n" +
+                "sudo sed -i s/.*$/" + machine.getName() + "/ /etc/hostname\n" +
                 "sudo service hostname start";
         
         this.executeScript(machineGuid, login, password, "updatehostname.sh", updatehostnameContent);
     }
     
+    public void grantAccessToSharedFolder(String machineGuid, String login, String password) throws Exception{
+     
+        // add the current user to the group vboxsf to read the shared folder
+        String addUserScript = "#!/bin/bash\n"+
+                "sudo usermod -a -G vboxsf $(whoami)";
+        
+        this.executeScript(machineGuid, login, password, "adduser.sh", addUserScript);
+    }
+    
     public void updateNetworkingInterfaces(String machineGuid, String login, String password, String ip, String mask) throws Exception {
         
         logger.log(Level.INFO, "Trying to update network interfaces on VM '"+machineGuid+"'");
+        
+        // TODO: do it in another way in Windows OS
         
         // create the new /etc/network/interfaces file, and copy to guest
         String interfacesContent = "auto lo\n"+
@@ -322,6 +313,13 @@ public class VirtualBoxService {
 
         logger.log(Level.INFO, "Trying to update hosts on VM '"+machineGuid+"'");
         
+        // TODO : do it in another way on Windows... detect the OS type of the VM,
+        // or connect to it to really detect the OS
+//        IMachine machine = this.virtualBoxManager.getVBox().findMachine(machineGuid);
+//        if(machine.getOSTypeId() == 0){
+//            
+//        }
+        
         // create the new /etc/hosts file, and copy to guest
         this.createFile(machineGuid, login, password, "/tmp/hosts", hosts);
         
@@ -338,50 +336,55 @@ public class VirtualBoxService {
         
         IMachine m = virtualBoxManager.getVBox().findMachine(machineGuid);
         
-        mutex.tryLock(3,  TimeUnit.MINUTES);
-        ISession session = virtualBoxManager.openMachineSession(m);
-        IConsole console = session.getConsole();
-        m = session.getMachine();
-        
+        mutex.lock();
         try{
-            IProgress progress = console.powerDown();
             
-            progress.waitForCompletion(60*1000);
+            ISession session = virtualBoxManager.openMachineSession(m);
+            IConsole console = session.getConsole();
             
-            if(!progress.getCompleted()){
-                throw new VirtualBoxException("Unable to shutdown vm "+machineGuid+": Timeout");
-            }
-            
-            if(progress.getResultCode() != 0){
-                throw new VirtualBoxException("Unable to shutdown vm "+machineGuid+": "+progress.getErrorInfo().getText());
-            }
-            
-            int nbTry = 0;
-            boolean off = false;
-            do{
-                nbTry++;
+            try{
+                IProgress progress = console.powerDown();
                 
-                off = m.getState() == MachineState.PoweredOff;
+                progress.waitForCompletion(60*1000);
+                
+                if(!progress.getCompleted()){
+                    throw new VirtualBoxException("Unable to shutdown vm "+machineGuid+": Timeout");
+                }
+                
+                if(progress.getResultCode() != 0){
+                    throw new VirtualBoxException("Unable to shutdown vm "+machineGuid+": "+progress.getErrorInfo().getText());
+                }
+                
+                int nbTry = 0;
+                boolean off = false;
+                do{
+                    nbTry++;
+                    
+                    off = m.getState() == MachineState.PoweredOff;
+                    
+                    if(!off){
+                        Thread.sleep(5*1000);
+                    }
+                }
+                while(!off && nbTry < 10);
                 
                 if(!off){
-                    Thread.sleep(5*1000);
+                    throw new VirtualBoxException("Unable to shutdown vm "+machineGuid+": Timeout");
                 }
             }
-            while(!off && nbTry < 10);
-            
-            if(!off){
-                throw new VirtualBoxException("Unable to shutdown vm "+machineGuid+": Timeout");
+            finally{
+                virtualBoxManager.closeMachineSession(session);
             }
-        }
-        finally{
-            virtualBoxManager.closeMachineSession(session);
+        }finally {
             mutex.unlock();
         }
     }
     
-    private void createFile(String machineGuid, String login, String password, String destination, String content) throws Exception{
+    public void createFile(String machineGuid, String login, String password, String destination, String content) throws Exception{
         
         logger.log(Level.INFO, "Trying to create file '"+destination+"' on machine '"+machineGuid+"'");
+        
+        // TODO: do it in another way with Windows OS
         
         // ultra hack: VirtualBox has a 'fileCreate' function, but not in the WS API
         // it's not possible to use '>' or '|' with "/bin/bash" command
@@ -470,6 +473,15 @@ public class VirtualBoxService {
 //                Arrays.asList(new String[0]));
     }
     
+    /**
+     * Create a script file (.sh or whatever) copy it on the guest OS and execute it
+     * @param machineGuid
+     * @param login
+     * @param password
+     * @param filename : the filename, will be saved in /tmp/ on the guest OS
+     * @param content : content of the script file
+     * @throws Exception
+     */
     private void executeScript(String machineGuid, String login, String password, String filename, String content) throws Exception {
         
         // copy the file
@@ -481,52 +493,62 @@ public class VirtualBoxService {
         this.executeCommand(machineGuid, login, password, "/tmp/"+filename, Arrays.asList(new String[0]), Arrays.asList(new String[0]));
     }
 
+    /**
+     * Execute a remote command on the Guest OS
+     * @param machineGuid
+     * @param login
+     * @param password
+     * @param command
+     * @param args
+     * @param envs
+     * @return the PID
+     * @throws Exception
+     */
     private long executeCommand(String machineGuid, String login, String password, String command, List<String> args, List<String> envs) throws Exception {
         
-        logger.log(Level.INFO, "Trying to execute command on machine '"+machineGuid+"': "+command+" "+StringUtils.join(args, ' ')+"");
+        logger.log(Level.INFO, "Trying to execute command on machine '"+machineGuid+"': "+command+" "+StringUtils.join(args, ' '));
         
         IMachine m = virtualBoxManager.getVBox().findMachine(machineGuid);
         
         mutex.lock();
         
-        ISession session = virtualBoxManager.openMachineSession(m);
-        IConsole console = session.getConsole();
-        IGuest guest = console.getGuest();
-        
-        m = session.getMachine();
-        
-        
         try{
+            ISession session = virtualBoxManager.openMachineSession(m);
+            IConsole console = session.getConsole();
+            IGuest guest = console.getGuest();
             
-            Holder<Long> pid = new Holder<Long>();
-            IProgress progress = guest.executeProcess(
-                    command, 
-                    0l,
-                    args, 
-                    envs,
-                    login,
-                    password, 
-                    60l*1000l,
-                    pid);
-            
-            progress.waitForCompletion(60*1000);
-            
-            if(!progress.getCompleted()){
-                throw new VirtualBoxException("Unable to execute command '"+command+" "+StringUtils.join(args, ' ')+"': Timeout");
+            try{
+                
+                Holder<Long> pid = new Holder<Long>();
+                IProgress progress = guest.executeProcess(
+                        command, 
+                        0l,
+                        args, 
+                        envs,
+                        login,
+                        password, 
+                        60l*1000l,
+                        pid);
+                
+                progress.waitForCompletion(60*1000);
+                
+                if(!progress.getCompleted()){
+                    throw new VirtualBoxException("Unable to execute command '"+command+" "+StringUtils.join(args, ' ')+"': Timeout");
+                }
+                
+                if(progress.getResultCode() != 0){
+                    throw new VirtualBoxException("Unable to execute command '"+command+" "+StringUtils.join(args, ' ')+"': ResultCode "+progress.getResultCode());
+                }
+                
+                // we can't really get the stdout/stderr with this webservice... 
+                
+                return pid.value;
             }
-            
-            if(progress.getResultCode() != 0){
-                throw new VirtualBoxException("Unable to execute command '"+command+" "+StringUtils.join(args, ' ')+"': ResultCode "+progress.getResultCode());
+            finally{
+                this.virtualBoxManager.closeMachineSession(session);
             }
-            
-            String output = new String(guest.getProcessOutput(pid.value, 0l, 60l*1000, 1024l));
-            
-            logger.log(Level.INFO, output);
-            
-            return pid.value;
         }
         finally{
-            this.virtualBoxManager.closeMachineSession(session);
             mutex.unlock();
         }
     }

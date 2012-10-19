@@ -77,11 +77,11 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
         hostsFile = "127.0.0.1  localhost\n";
 
         for (int cpt = 2; cpt < 10; cpt++) {
-            hostsFile += this.baseIp + "." + cpt + "\t" + this.cloud.getProvider().getManagementGroup() + (cpt-1) + "\n";
+            hostsFile += this.baseIp + "." + cpt + "\t" + this.cloud.getProvider().getManagementGroup() + (cpt - 1) + "\n";
         }
 
         for (int cpt = 10; cpt < 30; cpt++) {
-            hostsFile += this.baseIp + "." + cpt + "\t" + this.cloud.getProvider().getMachineNamePrefix() + (cpt-9) + "\n";
+            hostsFile += this.baseIp + "." + cpt + "\t" + this.cloud.getProvider().getMachineNamePrefix() + (cpt - 9) + "\n";
         }
     }
 
@@ -116,11 +116,8 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
         if (this.virtualBoxUrl == null) {
             throw new IllegalArgumentException("Custom field '" + VBOX_URL + "' must be set");
         }
-        
+
         this.hostSharedFolder = (String) this.cloud.getCustom().get(VBOX_SHARED_FOLDER);
-        if (this.hostSharedFolder == null) {
-            throw new IllegalArgumentException("Custom field '" + VBOX_SHARED_FOLDER + "' must be set");
-        }
 
         String headlessString = (String) this.cloud.getCustom().get(VBOX_HEADLESS);
         if (headlessString == null) {
@@ -209,7 +206,6 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
                     vboxInfo.getMachineName(),
                     this.template.getUsername(),
                     this.template.getPassword(),
-                    this.serverNamePrefix + id,
                     headless);
 
             virtualBoxService.updateNetworkingInterfaces(
@@ -224,6 +220,13 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
                     this.template.getUsername(),
                     this.template.getPassword(),
                     this.hostsFile);
+
+            if (this.hostSharedFolder != null && this.hostSharedFolder.length() > 0) {
+                virtualBoxService.grantAccessToSharedFolder(
+                        vboxInfo.getMachineName(),
+                        this.template.getUsername(),
+                        this.template.getPassword());
+            }
 
             md = new MachineDetails();
             md.setMachineId(vboxInfo.getGuid());
