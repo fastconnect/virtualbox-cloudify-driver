@@ -1,4 +1,4 @@
-package org.cloudifysource.sec.driver.provisioning.virtualbox;
+package fr.fastconnect.cloudify.driver.provisioning.virtualbox;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -19,9 +19,10 @@ import org.cloudifysource.esc.driver.provisioning.CloudProvisioningException;
 import org.cloudifysource.esc.driver.provisioning.MachineDetails;
 import org.cloudifysource.esc.driver.provisioning.ProvisioningDriver;
 import org.cloudifysource.esc.driver.provisioning.context.ProvisioningDriverClassContext;
-import org.cloudifysource.sec.driver.provisioning.virtualbox.api.VirtualBoxHostOnlyInterface;
-import org.cloudifysource.sec.driver.provisioning.virtualbox.api.VirtualBoxMachineInfo;
-import org.cloudifysource.sec.driver.provisioning.virtualbox.api.VirtualBoxService;
+
+import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.VirtualBoxHostOnlyInterface;
+import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.VirtualBoxMachineInfo;
+import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.VirtualBoxService;
 
 public class VirtualboxCloudifyDriver extends CloudDriverSupport implements ProvisioningDriver
 {

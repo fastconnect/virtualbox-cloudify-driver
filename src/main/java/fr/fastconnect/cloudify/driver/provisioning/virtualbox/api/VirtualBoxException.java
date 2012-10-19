@@ -1,4 +1,4 @@
-package org.cloudifysource.sec.driver.provisioning.virtualbox.api;
+package fr.fastconnect.cloudify.driver.provisioning.virtualbox.api;
 
 public class VirtualBoxException extends Exception {
 

@@ -7,7 +7,7 @@ cloud {
      * General configuration information about the cloud driver implementation.
      */
     configuration {
-        className "org.cloudifysource.sec.driver.provisioning.virtualbox.VirtualboxCloudifyDriver"
+        className "fr.fastconnect.cloudify.provisioning.virtualbox.VirtualboxCloudifyDriver"
         // Optional. The template name for the management machines. Defaults to the first template in the templates section below.
         managementMachineTemplate "LARGE_LINUX"
         // Optional. Indicates whether internal cluster communications should use the machine private IP. Defaults to true.
