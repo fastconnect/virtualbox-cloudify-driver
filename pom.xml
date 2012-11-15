@@ -10,7 +10,7 @@
 	
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-		<cloudifyVersion>2.1.1</cloudifyVersion>
+		<cloudifyVersion>2.2.0-RELEASE</cloudifyVersion>
 	</properties>
 	
 	<repositories>

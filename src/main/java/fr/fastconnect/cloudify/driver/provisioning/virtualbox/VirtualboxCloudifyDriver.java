@@ -94,8 +94,8 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
     }
 
     @Override
-    public void setConfig(Cloud cloud, String templateName, boolean management) {
-        super.setConfig(cloud, templateName, management);
+    public void setConfig(Cloud cloud, String templateName, boolean management, String serviceName) {
+        super.setConfig(cloud, templateName, management, serviceName);
 
         if (this.management) {
             this.serverNamePrefix = this.cloud.getProvider().getManagementGroup();
@@ -129,7 +129,7 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
         }
     }
 
-    public MachineDetails startMachine(long duration, TimeUnit timeout)
+    public MachineDetails startMachine(String locationId, long duration, TimeUnit unit)
             throws TimeoutException, CloudProvisioningException {
 
         logger.info("Start VBox machine");
@@ -239,7 +239,6 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
             md.setRemotePassword(this.template.getPassword());
             md.setRemoteExecutionMode(this.template.getRemoteExecution());
             md.setFileTransferMode(this.template.getFileTransfer());
-            md.setUsePrivateAddress(true);
             md.setPrivateAddress(addressIP);
             md.setPublicAddress(addressIP);
 
@@ -283,7 +282,7 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
                 // @Override
                 public MachineDetails call()
                         throws Exception {
-                    return startMachine(duration, timeout);
+                    return startMachine(null, duration, timeout);
                 }
 
             });
