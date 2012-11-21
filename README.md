@@ -6,7 +6,7 @@ Prerequisite
 * Start the VirtualBox WebService on the IP of the "HostOnlyInterface" you want to use. Ex:
 ```
 	$ VBoxManage setproperty websrvauthlibrary null
-	$ vboxwebsrv
+	$ vboxwebsrv --host 192.168.12.1
 	Oracle VM VirtualBox web service version 4.1.23
 	(C) 2005-2012 Oracle Corporation
 	All rights reserved.
