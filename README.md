@@ -35,7 +35,7 @@ custom ([
 ])
 ```
 
-You can find a full example of the configuration in src/test/resources (https://github.com/fastconnect/virtualbox-cloudify-driver/blob/master/src/test/resources/vbox-cloud.groovy)
+You can find a full example of the configuration in src/test/resources (https://github.com/fastconnect/virtualbox-cloudify-driver/blob/master/src/main/resources/vbox/vbox-cloud.groovy)
 
 Download and install
 --------------------
