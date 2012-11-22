@@ -52,6 +52,13 @@
 			<groupId>org.virtualbox</groupId>
 			<artifactId>vboxjws</artifactId>
 			<version>4.1.4</version>
+			<classifier>vbox41</classifier>
+		</dependency>
+		<dependency>
+			<groupId>org.virtualbox</groupId>
+			<artifactId>vboxjws</artifactId>
+			<version>4.2.0</version>
+			<classifier>vbox42</classifier>
 		</dependency>
 		<dependency>
 			<groupId>commons-codec</groupId>

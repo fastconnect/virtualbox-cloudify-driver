@@ -23,6 +23,8 @@ import org.cloudifysource.esc.driver.provisioning.context.ProvisioningDriverClas
 import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.VirtualBoxHostOnlyInterface;
 import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.VirtualBoxMachineInfo;
 import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.VirtualBoxService;
+import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.VirtualBoxService41;
+import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.VirtualBoxService42;
 
 public class VirtualboxCloudifyDriver extends CloudDriverSupport implements ProvisioningDriver
 {
@@ -33,7 +35,11 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
     private static final String VBOX_HOSTONLYIF = "vbox.hostonlyinterface";
     private static final String VBOX_HEADLESS = "vbox.headless";
     private static final String VBOX_URL = "vbox.serverUrl";
+    private static final String VBOX_VERSION = "vbox.version";
     private static final String VBOX_SHARED_FOLDER = "vbox.sharedFolder";
+    
+    private static final String VBOX_VERSION_41 = "4.1";
+    private static final String VBOX_VERSION_42 = "4.2";
 
     private static final ReentrantLock mutex = new ReentrantLock();
 
@@ -44,6 +50,7 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
     private String hostonlyifMask;
     private String hostonlyifName;
     private String hostSharedFolder;
+    private String vboxVersion;
 
     private boolean headless;
 
@@ -52,7 +59,7 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
 
     private String serverNamePrefix;
 
-    private VirtualBoxService virtualBoxService = new VirtualBoxService();
+    private VirtualBoxService virtualBoxService;
 
     private void checkHostOnlyInterface() throws Exception {
 
@@ -126,6 +133,21 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
         }
         else {
             this.headless = Boolean.parseBoolean(headlessString);
+        }
+        
+        this.vboxVersion = (String) this.cloud.getCustom().get(VBOX_VERSION);
+        if (headlessString == null) {
+            this.vboxVersion = VBOX_VERSION_42;
+        }
+        
+        if(this.vboxVersion.equalsIgnoreCase(VBOX_VERSION_41)){
+            this.virtualBoxService = new VirtualBoxService41();
+        }
+        else if(this.vboxVersion.equalsIgnoreCase(VBOX_VERSION_42)) {
+            this.virtualBoxService = new VirtualBoxService42();
+        }
+        else {
+            throw new IllegalArgumentException("Custom field '" + VBOX_VERSION + "' should be "+VBOX_VERSION_41+" or "+VBOX_VERSION_42);
         }
     }
 

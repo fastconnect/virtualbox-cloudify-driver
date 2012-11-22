@@ -22,9 +22,6 @@ cloud {
         // When using the default cloud driver, maps to the Compute Service Context provider name.
         provider "virtualbox"
 
-        // Mandatory. All files from this LOCAL directory will be copied to the remote machine directory.
-        localDirectory "tools/cli/plugins/esc/vbox/upload"
-        
         // Mandatory. The HTTP/S URL where cloudify can be downloaded from by newly started machines.
         cloudifyUrl "http://repository.cloudifysource.org/org/cloudifysource/2.1.1/gigaspaces-cloudify-2.1.1-ga-b1400.zip" 
         // create a archive with the driver in folder lib/plateform/esm
@@ -88,7 +85,9 @@ cloud {
                     password  "vagrant"
                     // Mandatory. Files from the local directory will be copied to this directory on the remote machine.
                     remoteDirectory "/tmp/gs-files"
-        
+                    // Mandatory. All files from this LOCAL directory will be copied to the remote machine directory.
+                    localDirectory "tools/cli/plugins/esc/vbox/upload"
+                    
                     // Optional. Overrides to default cloud driver behavior.
                     // When used with the default driver, maps to the overrides properties passed to the ComputeServiceContext a
                     options ([:])
@@ -110,7 +109,9 @@ cloud {
                     password  "vagrant"
                     // Mandatory. Files from the local directory will be copied to this directory on the remote machine.
                     remoteDirectory "/tmp/gs-files"
-        
+                    // Mandatory. All files from this LOCAL directory will be copied to the remote machine directory.
+                    localDirectory "tools/cli/plugins/esc/vbox/upload"
+                    
                     // Optional. Overrides to default cloud driver behavior.
                     // When used with the default driver, maps to the overrides properties passed to the ComputeServiceContext a
                     options ([:])
@@ -132,7 +133,9 @@ cloud {
                     password  "vagrant"
                     // Mandatory. Files from the local directory will be copied to this directory on the remote machine.
                     remoteDirectory "/tmp/gs-files"
-        
+                    // Mandatory. All files from this LOCAL directory will be copied to the remote machine directory.
+                    localDirectory "tools/cli/plugins/esc/vbox/upload"
+                    
                     // Optional. Overrides to default cloud driver behavior.
                     // When used with the default driver, maps to the overrides properties passed to the ComputeServiceContext a
                     options ([:])
@@ -151,6 +154,7 @@ cloud {
         "vbox.boxes.path" : "/Users/mathias/.vagrant.d/boxes/", // you can download on http://www.vagrantbox.es/
         "vbox.hostonlyinterface" : "vboxnet2", // this interface must be created manually
         "vbox.serverUrl" : "http://192.168.12.1:18083", // must be the IP of the vboxnet2 interface
+        "vbox.version" : "4.2", // optional, default 4.1, possible: 4.1 or 4.2
         "vbox.headless" : "false", // optional
         "vbox.sharedFolder" : "/Users/mathias/Work/vbox_shared" // Optional, to mount a shared folder between VMs
         ])
