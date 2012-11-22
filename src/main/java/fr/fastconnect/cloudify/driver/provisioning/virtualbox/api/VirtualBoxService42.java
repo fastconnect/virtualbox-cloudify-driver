@@ -368,38 +368,33 @@ public class VirtualBoxService42 implements VirtualBoxService {
             m = session.getMachine();
             IConsole console = session.getConsole();
             
-            try{
-                IProgress progress = console.powerDown();
+            IProgress progress = console.powerDown();
+            
+            progress.waitForCompletion(60*1000);
+            
+            if(!progress.getCompleted()){
+                throw new VirtualBoxException("Unable to shutdown vm "+machineGuid+": Timeout");
+            }
+            
+            if(progress.getResultCode() != 0){
+                throw new VirtualBoxException("Unable to shutdown vm "+machineGuid+": "+progress.getErrorInfo().getText());
+            }
+            
+            int nbTry = 0;
+            boolean off = false;
+            do{
+                nbTry++;
                 
-                progress.waitForCompletion(60*1000);
-                
-                if(!progress.getCompleted()){
-                    throw new VirtualBoxException("Unable to shutdown vm "+machineGuid+": Timeout");
-                }
-                
-                if(progress.getResultCode() != 0){
-                    throw new VirtualBoxException("Unable to shutdown vm "+machineGuid+": "+progress.getErrorInfo().getText());
-                }
-                
-                int nbTry = 0;
-                boolean off = false;
-                do{
-                    nbTry++;
-                    
-                    off = m.getState() == MachineState.PoweredOff;
-                    
-                    if(!off){
-                        Thread.sleep(5*1000);
-                    }
-                }
-                while(!off && nbTry < 10);
+                off = m.getState() == MachineState.PoweredOff;
                 
                 if(!off){
-                    throw new VirtualBoxException("Unable to shutdown vm "+machineGuid+": Timeout");
+                    Thread.sleep(5*1000);
                 }
             }
-            finally{
-                virtualBoxManager.closeMachineSession(session);
+            while(!off && nbTry < 10);
+            
+            if(!off){
+                throw new VirtualBoxException("Unable to shutdown vm "+machineGuid+": Timeout");
             }
         }finally {
             mutex.unlock();
