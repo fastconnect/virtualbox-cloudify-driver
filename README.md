@@ -1,9 +1,10 @@
 Prerequisite
 ------------
 
-* Have VirtualBox installed. On you local machine or on a server. Tested with 4.1.23.
-* Create a "HostOnlyInterface" (don't need a DHCP). Ex: IP 192.168.12.1 NetMask 255.255.255.0
-* Start the VirtualBox WebService on the IP of the "HostOnlyInterface" you want to use. Ex:
+* Have [Cloudify >= 2.2](http://www.gigaspaces.com/cloudify-open-paas-stack) installed.
+* Have [VirtualBox](https://www.virtualbox.org/) installed. On you local machine or on a server. Tested with 4.1.23 and 4.2.4.
+* Create a ["HostOnlyInterface"](https://www.virtualbox.org/manual/ch06.html#network_hostonly) (don't need a DHCP). Ex: IP 192.168.12.1 NetMask 255.255.255.0
+* Start the [VirtualBox WebService](http://download.virtualbox.org/virtualbox/SDKRef.pdf) on the IP of the "HostOnlyInterface" you want to use. Ex:
 ```
 	$ VBoxManage setproperty websrvauthlibrary null
 	$ vboxwebsrv --host 192.168.12.1
@@ -15,7 +16,7 @@ Prerequisite
 	...
 ```
 
-* Download some "boxes" from Vagrant: http://www.vagrantbox.es/. You can package with Veewee: https://github.com/jedi4ever/veewee. Boxes should have:
+* Download some "boxes" from Vagrant: http://www.vagrantbox.es/. You can package your own boxes with Veewee: https://github.com/jedi4ever/veewee. They should have:
    * An account with sudo rights without password
    * VirtualBox Guest Additions installed
 * Only LINUX boxes are supported for now
@@ -28,6 +29,7 @@ custom ([
     "vbox.boxes.path" : "/Users/mathias/.vagrant.d/boxes/", // you can download on http://www.vagrantbox.es/
     "vbox.hostonlyinterface" : "vboxnet2", // this interface must be created manually
     "vbox.serverUrl" : "http://192.168.12.1:18083", // must be the IP of the vboxnet2 interface
+    "vbox.version" : "4.1", // optional, default 4.1, possible: 4.1 or 4.2
     "vbox.headless" : "false", // optional
     "vbox.sharedFolder" : "/Users/mathias/Work/vbox_shared" // Optional, to mount a shared folder between VMs
 ])
@@ -38,7 +40,7 @@ You can find a full example of the configuration in src/test/resources (https://
 Download and install
 --------------------
 You can download the driver from our Nexus, and package it in a gigaspaces_overrides.zip (you can use maven:assembly to do that, but you should exclude cloudify dependencies for a lighter archive)
-The use of gigaspaces_overrides is explained here: http://www.cloudifysource.org/guide/2.1/clouddrivers/tutorial_maven (Packing and Adding to Cloudify)
+The use of gigaspaces_overrides is explained here: http://www.cloudifysource.org/guide/2.2/clouddrivers/tutorial_maven (Packing and Adding to Cloudify)
 
 Here is the POM configuration to include the driver:
 ```xml
@@ -53,7 +55,7 @@ Here is the POM configuration to include the driver:
 	<dependency>
 		<groupId>fr.fastconnect</groupId>
 		<artifactId>virtualbox-cloudify-driver</artifactId>
-		<version>1.1</version>
+		<version>1.2</version>
 		<exclusions>
 			<exclusion>
 				<artifactId>esc</artifactId>
@@ -68,7 +70,7 @@ Here is the POM configuration to include the driver:
 </dependencies>
 ```
 
-Here is the full URL: https://opensource.fastconnect.org/maven/content/repositories/opensource/fr/fastconnect/virtualbox-cloudify-driver/1.1/virtualbox-cloudify-driver-1.1.jar
+Here is the full URL: https://opensource.fastconnect.org/maven/content/repositories/opensource/fr/fastconnect/virtualbox-cloudify-driver/1.2/virtualbox-cloudify-driver-1.2.jar
 
 
 Copyright and license
