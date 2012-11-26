@@ -1,4 +1,3 @@
-
 cloud {
     // Mandatory. The name of the cloud, as it will appear in the Cloudify UI.
     name = "vbox"
@@ -86,7 +85,7 @@ cloud {
                     // Mandatory. Files from the local directory will be copied to this directory on the remote machine.
                     remoteDirectory "/tmp/gs-files"
                     // Mandatory. All files from this LOCAL directory will be copied to the remote machine directory.
-                    localDirectory "tools/cli/plugins/esc/vbox/upload"
+                    localDirectory "upload"
                     
                     // Optional. Overrides to default cloud driver behavior.
                     // When used with the default driver, maps to the overrides properties passed to the ComputeServiceContext a
@@ -110,7 +109,7 @@ cloud {
                     // Mandatory. Files from the local directory will be copied to this directory on the remote machine.
                     remoteDirectory "/tmp/gs-files"
                     // Mandatory. All files from this LOCAL directory will be copied to the remote machine directory.
-                    localDirectory "tools/cli/plugins/esc/vbox/upload"
+                    localDirectory "upload"
                     
                     // Optional. Overrides to default cloud driver behavior.
                     // When used with the default driver, maps to the overrides properties passed to the ComputeServiceContext a
@@ -134,7 +133,7 @@ cloud {
                     // Mandatory. Files from the local directory will be copied to this directory on the remote machine.
                     remoteDirectory "/tmp/gs-files"
                     // Mandatory. All files from this LOCAL directory will be copied to the remote machine directory.
-                    localDirectory "tools/cli/plugins/esc/vbox/upload"
+                    localDirectory "upload"
                     
                     // Optional. Overrides to default cloud driver behavior.
                     // When used with the default driver, maps to the overrides properties passed to the ComputeServiceContext a
