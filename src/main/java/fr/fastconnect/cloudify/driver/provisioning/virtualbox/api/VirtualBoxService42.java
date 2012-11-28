@@ -17,6 +17,7 @@ import org.virtualbox_4_2.Holder;
 import org.virtualbox_4_2.IAppliance;
 import org.virtualbox_4_2.IConsole;
 import org.virtualbox_4_2.IGuest;
+import org.virtualbox_4_2.IGuestOSType;
 import org.virtualbox_4_2.IGuestProcess;
 import org.virtualbox_4_2.IGuestSession;
 import org.virtualbox_4_2.IHostNetworkInterface;
@@ -39,6 +40,10 @@ import org.virtualbox_4_2.jaxws.InvalidObjectFaultMsg;
 import org.virtualbox_4_2.jaxws.RuntimeFaultMsg;
 import org.virtualbox_4_2.jaxws.VboxPortType;
 
+import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.guest.UbuntuGuest;
+import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.guest.VirtualBoxGuest;
+import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.guest.VirtualBoxGuestProvider;
+
 
 public class VirtualBoxService42 implements VirtualBoxService {
     
@@ -49,10 +54,16 @@ public class VirtualBoxService42 implements VirtualBoxService {
     
     private VirtualBoxManager virtualBoxManager;
     
+    private VirtualBoxGuestController virtualBoxGuestController;
+    
+    private VirtualBoxGuestProvider virtualBoxGuestProvider;
+    
     private static final ReentrantLock mutex = new ReentrantLock();
     
     public VirtualBoxService42() {
         this.virtualBoxManager = VirtualBoxManager.createInstance(null);
+        this.virtualBoxGuestController = new VirtualBoxGuestController42(this.virtualBoxManager);
+        this.virtualBoxGuestProvider = new VirtualBoxGuestProvider(this.virtualBoxGuestController);
     }
 
     public void connect(String url, String login, String password) throws VirtualBoxException{
@@ -262,7 +273,8 @@ public class VirtualBoxService42 implements VirtualBoxService {
             throw new VirtualBoxException("Unable to start VM:");
         }
         
-        // TODO: do it in another way with Windows OS
+        IMachine machine = virtualBoxManager.getVBox().findMachine(machineGuid);        
+        VirtualBoxGuest guest = this.virtualBoxGuestProvider.getVirtualBoxGuest(machine.getOSTypeId());
         
         // wait for the guest OS to be ready
         int nbTry = 0;
@@ -271,7 +283,7 @@ public class VirtualBoxService42 implements VirtualBoxService {
         do{
             nbTry++;
             try{
-                executeCommand(machineGuid, login, password, "/bin/ls",Arrays.asList(new String[0]), Arrays.asList(new String[0]));
+                guest.ping(machineGuid, login, password);
                 
                 isReady = true;
             }
@@ -289,14 +301,8 @@ public class VirtualBoxService42 implements VirtualBoxService {
             throw new VirtualBoxException("Timeout while waiting guest to be ready", lastException);
         }
         
-        IMachine machine = this.virtualBoxManager.getVBox().findMachine(machineGuid);
-        
         // create a script to update the hostname
-        String updatehostnameContent = "#!/bin/bash\n"+
-                "sudo sed -i s/.*$/" + machine.getName() + "/ /etc/hostname\n" +
-                "sudo service hostname start";
-        
-        this.executeScript(machineGuid, login, password, "updatehostname.sh", updatehostnameContent);
+        guest.updateHostname(machineGuid, login, password, machine.getName());
     }
     
     public void grantAccessToSharedFolder(String machineGuid, String login, String password) throws Exception{
@@ -305,54 +311,32 @@ public class VirtualBoxService42 implements VirtualBoxService {
         String addUserScript = "#!/bin/bash\n"+
                 "sudo usermod -a -G vboxsf $(whoami)";
         
-        this.executeScript(machineGuid, login, password, "adduser.sh", addUserScript);
+        IMachine machine = this.virtualBoxManager.getVBox().findMachine(machineGuid);
+        VirtualBoxGuest guest = this.virtualBoxGuestProvider.getVirtualBoxGuest(machine.getOSTypeId());
+        guest.executeScript(machineGuid, login, password, "adduser.sh", addUserScript);
     }
     
-    public void updateNetworkingInterfaces(String machineGuid, String login, String password, String ip, String mask) throws Exception {
+    public void updateNetworkingInterfaces(String machineGuid, String login, String password, String ip, String mask, String gateway) throws Exception {
         
         logger.log(Level.INFO, "Trying to update network interfaces on VM '"+machineGuid+"'");
         
-        // TODO: do it in another way in Windows OS
+        IMachine machine = this.virtualBoxManager.getVBox().findMachine(machineGuid);
+        String eth0Mac = machine.getNetworkAdapter(0l).getMACAddress();
+        eth0Mac = eth0Mac.substring(0,2)+":"+eth0Mac.substring(2, 4)+":"+eth0Mac.substring(4, 6)+":"+eth0Mac.substring(6, 8)+":"+eth0Mac.substring(8, 10)+":"+eth0Mac.substring(10, 12);
+        String eth1Mac = machine.getNetworkAdapter(1l).getMACAddress();
+        eth1Mac = eth1Mac.substring(0,2)+":"+eth1Mac.substring(2, 4)+":"+eth1Mac.substring(4, 6)+":"+eth1Mac.substring(6, 8)+":"+eth1Mac.substring(8, 10)+":"+eth1Mac.substring(10, 12);
         
-        // create the new /etc/network/interfaces file, and copy to guest
-        String interfacesContent = "auto lo\n"+
-                "iface lo inet loopback\n\n"+
-                "auto eth0\n"+
-                "iface eth0 inet dhcp\n\n"+
-                "auto eth1\n"+
-                "iface eth1 inet static\n"+
-                "address "+ip+"\n"+
-                "netmask "+mask+"\n";
-        
-        this.createFile(machineGuid, login, password, "/tmp/interfaces", interfacesContent);
-        
-        // create the script to update the interfaces file, and copy it to the guest        
-        String updateinterfacesContent = "#!/bin/bash\n"+
-                "cat /tmp/interfaces | sudo tee /etc/network/interfaces\n"+
-                "sudo /etc/init.d/networking restart";  
-        
-        this.executeScript(machineGuid, login, password, "updateinterfaces.sh", updateinterfacesContent);
+        VirtualBoxGuest guest = this.virtualBoxGuestProvider.getVirtualBoxGuest(machine.getOSTypeId());
+        guest.updateNetworkingInterfaces(machineGuid, login, password, ip, mask, gateway, eth0Mac, eth1Mac);
     }
 
     public void updateHosts(String machineGuid, String login, String password, String hosts) throws InterruptedException, Exception {
 
         logger.log(Level.INFO, "Trying to update hosts on VM '"+machineGuid+"'");
         
-        // TODO : do it in another way on Windows... detect the OS type of the VM,
-        // or connect to it to really detect the OS
-//        IMachine machine = this.virtualBoxManager.getVBox().findMachine(machineGuid);
-//        if(machine.getOSTypeId() == 0){
-//            
-//        }
-        
-        // create the new /etc/hosts file, and copy to guest
-        this.createFile(machineGuid, login, password, "/tmp/hosts", hosts);
-        
-        // create the script to update the interfaces file, and copy it to the guest
-        String updatehostsScript = "#!/bin/bash\n"+
-                "cat "+"/tmp/hosts"+" | sudo tee /etc/hosts\n";
-        
-        this.executeScript(machineGuid, login, password, "updatehosts.sh", updatehostsScript);
+        IMachine machine = this.virtualBoxManager.getVBox().findMachine(machineGuid);
+        VirtualBoxGuest guest = this.virtualBoxGuestProvider.getVirtualBoxGuest(machine.getOSTypeId());
+        guest.updateHosts(machineGuid, login, password, hosts);
     }
 
     public void stop(String machineGuid) throws Exception {
@@ -397,175 +381,6 @@ public class VirtualBoxService42 implements VirtualBoxService {
                 throw new VirtualBoxException("Unable to shutdown vm "+machineGuid+": Timeout");
             }
         }finally {
-            mutex.unlock();
-        }
-    }
-    
-    public void createFile(String machineGuid, String login, String password, String destination, String content) throws Exception{
-        
-        logger.log(Level.INFO, "Trying to create file '"+destination+"' on machine '"+machineGuid+"'");
-        
-        // TODO: do it in another way with Windows OS
-        
-        // ultra hack: VirtualBox has a 'fileCreate' function, but not in the WS API
-        // it's not possible to use '>' or '|' with "/bin/bash" command
-        // and the content of the file could have special chars for bash
-        // so the hack is to copy an existing file, change it with sed with a base64 content to avoid special chars
-        // and decode it with openssl
-        
-        byte[] bytes = Base64.encodeBase64((content+"\n").getBytes());
-        
-        // openssl has a limit for each line in base64
-        // should be 76 but seems that sometimes it's not working
-        final int maxBase64lenght = 60;
-        String base64 = new String(bytes);
-        int linesNumber = base64.length() / maxBase64lenght;
-        if((base64.length() % maxBase64lenght) > 0){
-            linesNumber++;
-        }
-        
-        List<String> builder = new ArrayList<String>();
-        
-        for(int cpt = 0; cpt < linesNumber; cpt++){
-            if(cpt == linesNumber-1){
-                builder.add(base64.substring(cpt*maxBase64lenght, base64.length()));   
-            }
-            else {
-                builder.add(base64.substring(cpt*maxBase64lenght, (cpt+1)*maxBase64lenght));   
-            }
-        }
-        
-        // copy a file
-        this.executeCommand(
-                machineGuid,
-                login, 
-                password,
-                "/bin/cp", 
-                Arrays.asList("/etc/hostname", destination+".base64"),
-                Arrays.asList(new String[0]));
-        
-        // replace all chars by the base64
-        // because the base64 can be too big, append each lines to the file
-     
-        // create a first "markup"
-        this.executeCommand(
-                machineGuid,
-                login, 
-                password,
-                "/bin/sed", 
-                Arrays.asList("-i", "s/.*/:/g", destination+".base64"),
-                Arrays.asList(new String[0]));
-        
-        for(String line : builder){
-            this.executeCommand(
-                    machineGuid,
-                    login, 
-                    password,
-                    "/bin/sed", 
-                    Arrays.asList("-i", "'s/:/\\n"+line+":/'", destination+".base64"),
-                    Arrays.asList(new String[0]));
-        }
-        
-        // replace the final ':' by a new line
-        this.executeCommand(
-                machineGuid,
-                login, 
-                password,
-                "/bin/sed", 
-                Arrays.asList("-i", "s/:/\\n/g", destination+".base64"),
-                Arrays.asList(new String[0]));
-        
-        // convert the base64 file with openssl
-        this.executeCommand(
-                machineGuid,
-                login, 
-                password,
-                "/usr/bin/openssl", 
-                Arrays.asList("enc", "-base64", "-d", "-base64", "-in", destination+".base64", "-out", destination),
-                Arrays.asList(new String[0]));
-        
-        // remove the base64 file
-//        this.executeCommand(
-//                machineGuid,
-//                login, 
-//                password,
-//                "/bin/rm", 
-//                Arrays.asList(destination+".base64"),
-//                Arrays.asList(new String[0]));
-    }
-    
-    /**
-     * Create a script file (.sh or whatever) copy it on the guest OS and execute it
-     * @param machineGuid
-     * @param login
-     * @param password
-     * @param filename : the filename, will be saved in /tmp/ on the guest OS
-     * @param content : content of the script file
-     * @throws Exception
-     */
-    private void executeScript(String machineGuid, String login, String password, String filename, String content) throws Exception {
-        
-        // copy the file
-        this.createFile(machineGuid, login, password, "/tmp/"+filename, content);
-        
-        logger.log(Level.INFO, "Trying to execute file '"+"/tmp/"+filename+"' on VM '"+machineGuid+"'");
-        
-        this.executeCommand(machineGuid, login, password, "/bin/chmod", Arrays.asList("a+x","/tmp/"+filename), Arrays.asList(new String[0]));
-        this.executeCommand(machineGuid, login, password, "/tmp/"+filename, Arrays.asList(new String[0]), Arrays.asList(new String[0]));
-    }
-
-    /**
-     * Execute a remote command on the Guest OS
-     * @param machineGuid
-     * @param login
-     * @param password
-     * @param command
-     * @param args
-     * @param envs
-     * @return the PID
-     * @throws Exception
-     */
-    private long executeCommand(String machineGuid, String login, String password, String command, List<String> args, List<String> envs) throws Exception {
-        
-        logger.log(Level.INFO, "Trying to execute command on machine '"+machineGuid+"': "+command+" "+StringUtils.join(args, ' '));
-        
-        IMachine m = virtualBoxManager.getVBox().findMachine(machineGuid);
-        
-        mutex.lock();
-        
-        try{
-            ISession session = virtualBoxManager.openMachineSession(m);
-            m = session.getMachine();
-            IConsole console = session.getConsole();
-            IGuest guest = console.getGuest();
-            
-            IGuestSession guestSession = guest.createSession(login, password, "", "");
-            
-            try{
-                
-                IGuestProcess process = guestSession.processCreate(
-                        command, 
-                        args, 
-                        envs,
-                        Arrays.asList(ProcessCreateFlag.None),
-                        60l*1000l);
-                
-                process.waitFor(new Long(ProcessWaitForFlag.Terminate.value()), 60l*1000);
-                
-                if(process.getStatus() != ProcessStatus.TerminatedNormally){
-                    throw new VirtualBoxException("Unable to execute command '"+command+" "+StringUtils.join(args, ' ')+"': Status "+process.getStatus() +" ExitCode "+process.getExitCode());
-                }
-                
-                // we can't really get the stdout/stderr with this webservice... 
-                
-                return process.getPID();
-            }
-            finally{
-                guestSession.close();
-                this.virtualBoxManager.closeMachineSession(session);
-            }
-        }
-        finally{
             mutex.unlock();
         }
     }

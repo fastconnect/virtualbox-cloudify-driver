@@ -303,7 +303,7 @@ public class VirtualBoxService41 implements VirtualBoxService {
         this.executeScript(machineGuid, login, password, "adduser.sh", addUserScript);
     }
     
-    public void updateNetworkingInterfaces(String machineGuid, String login, String password, String ip, String mask) throws Exception {
+    public void updateNetworkingInterfaces(String machineGuid, String login, String password, String ip, String mask, String gateway) throws Exception {
         
         logger.log(Level.INFO, "Trying to update network interfaces on VM '"+machineGuid+"'");
         

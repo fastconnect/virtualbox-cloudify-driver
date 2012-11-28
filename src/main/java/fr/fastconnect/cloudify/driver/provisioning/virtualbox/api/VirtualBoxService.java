@@ -21,13 +21,11 @@ public interface VirtualBoxService {
 
     public void grantAccessToSharedFolder(String machineGuid, String login, String password) throws Exception;
 
-    public void updateNetworkingInterfaces(String machineGuid, String login, String password, String ip, String mask) throws Exception;
+    public void updateNetworkingInterfaces(String machineGuid, String login, String password, String ip, String mask, String gateway) throws Exception;
 
     public void updateHosts(String machineGuid, String login, String password, String hosts) throws InterruptedException, Exception;
 
     public void stop(String machineGuid) throws Exception;
-
-    public void createFile(String machineGuid, String login, String password, String destination, String content) throws Exception;
 
     public VirtualBoxHostOnlyInterface getHostOnlyInterface(String hostonlyifName);
 

@@ -225,24 +225,26 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
             } finally {
                 mutex.unlock();
             }
+            
             virtualBoxService.start(
                     vboxInfo.getMachineName(),
                     this.template.getUsername(),
                     this.template.getPassword(),
                     headless);
 
-            virtualBoxService.updateNetworkingInterfaces(
-                    vboxInfo.getMachineName(),
-                    this.template.getUsername(),
-                    this.template.getPassword(),
-                    addressIP,
-                    this.hostonlyifMask);
-
             virtualBoxService.updateHosts(
                     vboxInfo.getMachineName(),
                     this.template.getUsername(),
                     this.template.getPassword(),
                     this.hostsFile);
+            
+            virtualBoxService.updateNetworkingInterfaces(
+                    vboxInfo.getMachineName(),
+                    this.template.getUsername(),
+                    this.template.getPassword(),
+                    addressIP,
+                    this.hostonlyifMask,
+                    this.hostonlyifIP);
 
             if (this.hostSharedFolder != null && this.hostSharedFolder.length() > 0) {
                 virtualBoxService.grantAccessToSharedFolder(
