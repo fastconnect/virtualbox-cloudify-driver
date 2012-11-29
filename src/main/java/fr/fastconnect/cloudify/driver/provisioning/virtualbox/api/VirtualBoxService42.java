@@ -174,7 +174,7 @@ public class VirtualBoxService42 implements VirtualBoxService {
         virtualSystemDescription.setFinalValues(enabled, vBoxValues.value, extraConfigValues.value);
         
         IProgress progress = appliance.importMachines(Arrays.asList(new ImportOptions[0]));
-        progress.waitForCompletion(60*1000);
+        progress.waitForCompletion(60*3000);
         
         if(!progress.getCompleted()){
             throw new VirtualBoxException("Unable to import VM: Timeout");   
