@@ -246,13 +246,11 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
                     this.hostonlyifMask,
                     this.hostonlyifIP);
 
-            if (this.hostSharedFolder != null && this.hostSharedFolder.length() > 0) {
-                virtualBoxService.grantAccessToSharedFolder(
-                        vboxInfo.getMachineName(),
-                        this.template.getUsername(),
-                        this.template.getPassword());
-            }
-
+            virtualBoxService.grantAccessToSharedFolder(
+                    vboxInfo.getMachineName(),
+                    this.template.getUsername(),
+                    this.template.getPassword());
+            
             md = new MachineDetails();
             md.setMachineId(vboxInfo.getGuid());
             md.setAgentRunning(false);

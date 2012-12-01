@@ -58,8 +58,6 @@ public class RedhatGuest extends LinuxGuest {
                 "sudo udevadm trigger\n";
         executeScript(machineGuid, login, password, "refreshinterfaces.sh", refreshinterfacesContent);
         
-        
-        
         String test = "#!/bin/bash\n"+
                 //"sudo service network restart\n";
                 "sudo ifdown eth0\n"+
@@ -69,25 +67,6 @@ public class RedhatGuest extends LinuxGuest {
                 "sudo ifup eth1 "+ip+"\n"; 
         executeScript(machineGuid, login, password, "test.sh", test);
         
-        // /usr/bin/sudo
-        
-        
-        /*
-        String restartinterfaceeth1Content = "#!/bin/bash\n"+
-                //"sudo service network restart\n";
-                "sudo ifdown eth1 &> /tmp/ifdowneth1.log\n"+
-                "sleep 3\n"+
-                "sudo ifup eth1 &> /tmp/ifupeth1.log\n";
-        executeScript(machineGuid, login, password, "restartinterfaceeth1.sh", restartinterfaceeth1Content);
-        
-        String restartinterfaceeth0Content = "#!/bin/bash\n"+
-                //"sudo service network restart\n";
-                "sudo ifdown eth0 2> /dev/null\n"+
-                "sleep 3\n"+
-                "sudo ifup eth0 2> /dev/null\n";
-        executeScript(machineGuid, login, password, "restartinterfaceeth0.sh", restartinterfaceeth0Content);
-*/        
-
         String stopfirewallContent = "#!/bin/bash\n"+
                 "sudo /etc/init.d/iptables stop\n";  
         executeScript(machineGuid, login, password, "stopfirewall.sh", stopfirewallContent);
