@@ -1,7 +1,7 @@
 Prerequisite
 ------------
 
-* Have [Cloudify >= 2.2](http://www.gigaspaces.com/cloudify-open-paas-stack) installed.
+* Have [Cloudify >= 2.3](http://www.gigaspaces.com/cloudify-open-paas-stack) installed.
 * Have [VirtualBox](https://www.virtualbox.org/) installed. On you local machine or on a server. Tested with 4.1.23 and 4.2.4.
 * Create a ["HostOnlyInterface"](https://www.virtualbox.org/manual/ch06.html#network_hostonly) (don't need a DHCP). Ex: IP 192.168.12.1 NetMask 255.255.255.0
 * Start the [VirtualBox WebService](http://download.virtualbox.org/virtualbox/SDKRef.pdf) on the IP of the "HostOnlyInterface" you want to use. Ex:
@@ -40,7 +40,7 @@ You can find a full example of the configuration in src/test/resources (https://
 Download and install
 --------------------
 You can download the driver from our Nexus, and package it in a gigaspaces_overrides.zip (you can use maven:assembly to do that, but you should exclude cloudify dependencies for a lighter archive)
-The use of gigaspaces_overrides is explained here: http://www.cloudifysource.org/guide/2.2/clouddrivers/tutorial_maven (Packing and Adding to Cloudify)
+The use of gigaspaces_overrides is explained here: http://www.cloudifysource.org/guide/2.3/clouddrivers/tutorial_maven (Packing and Adding to Cloudify)
 
 Here is the POM configuration to include the driver:
 ```xml
@@ -55,7 +55,7 @@ Here is the POM configuration to include the driver:
 	<dependency>
 		<groupId>fr.fastconnect</groupId>
 		<artifactId>virtualbox-cloudify-driver</artifactId>
-		<version>1.2</version>
+		<version>1.3</version>
 		<exclusions>
 			<exclusion>
 				<artifactId>esc</artifactId>
@@ -70,7 +70,7 @@ Here is the POM configuration to include the driver:
 </dependencies>
 ```
 
-Here is the full URL: https://opensource.fastconnect.org/maven/content/repositories/opensource/fr/fastconnect/virtualbox-cloudify-driver/1.2/virtualbox-cloudify-driver-1.2.jar
+Here is the full URL: https://opensource.fastconnect.org/maven/content/repositories/opensource/fr/fastconnect/virtualbox-cloudify-driver/1.3/virtualbox-cloudify-driver-1.3.jar
 
 
 Copyright and license
