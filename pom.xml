@@ -10,7 +10,8 @@
 	
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-		<cloudifyVersion>2.2.0-RELEASE</cloudifyVersion>
+		<cloudifyVersion>2.3.0-RELEASE</cloudifyVersion>
+		<openspacesVersion>9.1.1-RELEASE</openspacesVersion>
 	</properties>
 	
 	<repositories>
@@ -37,6 +38,11 @@
 			<groupId>org.cloudifysource</groupId>
 			<artifactId>dsl</artifactId>
 			<version>${cloudifyVersion}</version>
+		</dependency>
+		<dependency>
+			<groupId>com.gigaspaces</groupId>
+			<artifactId>gs-openspaces</artifactId>
+			<version>${openspacesVersion}</version>
 		</dependency>
 		<dependency>
 			<groupId>org.virtualbox</groupId>
