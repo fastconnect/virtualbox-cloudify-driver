@@ -26,6 +26,10 @@
 			<id>repo.opensource.fastconnect.org</id>
 			<url>http://opensource.fastconnect.org/maven/content/repositories/opensource</url>
 		</repository>
+		<snapshotRepository>
+			<id>repo.opensource.snapshot.fastconnect.org</id>
+			<url>http://opensource.fastconnect.org/maven/content/repositories/opensource-snapshot</url>
+		</snapshotRepository>
 	</distributionManagement>
 	
 	<dependencies>
