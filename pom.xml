@@ -33,16 +33,19 @@
 			<groupId>org.cloudifysource</groupId>
 			<artifactId>esc</artifactId>
 			<version>${cloudifyVersion}</version>
+			<scope>provided</scope>
 		</dependency>
 		<dependency>
 			<groupId>org.cloudifysource</groupId>
 			<artifactId>dsl</artifactId>
 			<version>${cloudifyVersion}</version>
+			<scope>provided</scope>
 		</dependency>
 		<dependency>
 			<groupId>com.gigaspaces</groupId>
 			<artifactId>gs-openspaces</artifactId>
 			<version>${openspacesVersion}</version>
+			<scope>provided</scope>
 		</dependency>
 		<dependency>
 			<groupId>org.virtualbox</groupId>
