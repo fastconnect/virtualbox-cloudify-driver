@@ -367,13 +367,14 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
 
             String machineName = this.serverNamePrefix + (lastIp - 1);
 
+            logger.log(Level.INFO, "Stoping machine "+machineName);
             VirtualBoxMachineInfo info = this.virtualBoxService.getInfo(machineName);
             this.virtualBoxService.stop(info.getGuid());
             this.virtualBoxService.destroy(info.getGuid());
 
             return true;
         } catch (Exception ex) {
-            // TODO : logs
+            logger.log(Level.SEVERE, "Unable to stop machine "+machineIp, ex);
             return false;
         }
     }
