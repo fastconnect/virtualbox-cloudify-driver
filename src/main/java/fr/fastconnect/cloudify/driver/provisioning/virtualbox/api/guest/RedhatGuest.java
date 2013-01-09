@@ -68,7 +68,8 @@ public class RedhatGuest extends LinuxGuest {
         executeScript(machineGuid, login, password, "test.sh", test);
         
         String stopfirewallContent = "#!/bin/bash\n"+
-                "sudo /etc/init.d/iptables stop\n";  
+                "sudo /etc/init.d/iptables stop\n" +
+                "sudo chkconfig iptables off\n";  
         executeScript(machineGuid, login, password, "stopfirewall.sh", stopfirewallContent);
         
 
