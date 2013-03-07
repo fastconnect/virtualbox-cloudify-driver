@@ -1,4 +1,4 @@
-package fr.fastconnect.cloudify.driver.provisioning.virtualbox.api;
+package fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.guest;
 
 import java.util.Arrays;
 import java.util.List;
@@ -17,23 +17,23 @@ import org.virtualbox_4_2.ProcessStatus;
 import org.virtualbox_4_2.ProcessWaitForFlag;
 import org.virtualbox_4_2.VirtualBoxManager;
 
-public class VirtualBoxGuestController42 implements VirtualBoxGuestController {
+import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.VirtualBoxException;
+
+public abstract class BaseGuest implements VirtualBoxGuest {
     
     private static final java.util.logging.Logger logger = java.util.logging.Logger
-            .getLogger(VirtualBoxGuestController42.class.getName());
-
-    private VirtualBoxManager virtualBoxManager;
+            .getLogger(BaseGuest.class.getName());
     
     private static final ReentrantLock mutex = new ReentrantLock();
     
-    public VirtualBoxGuestController42(VirtualBoxManager virtualBoxManager) {
+    private VirtualBoxManager virtualBoxManager;
+    
+    
+    protected BaseGuest(VirtualBoxManager virtualBoxManager) {
         this.virtualBoxManager = virtualBoxManager;
     }
-
-    /* (non-Javadoc)
-     * @see fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.VirtualBoxGuestController#executeCommand(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.util.List, java.util.List)
-     */
-    public long executeCommand(String machineGuid, String login, String password, String command, List<String> args, List<String> envs) throws Exception {
+    
+    public long executeCommand(String machineGuid, String login, String password, String command, List<String> args, List<String> envs, long endTime) throws Exception {
         
         logger.log(Level.INFO, "Trying to execute command on machine '"+machineGuid+"': "+command+" "+StringUtils.join(args, ' '));
         
@@ -51,16 +51,18 @@ public class VirtualBoxGuestController42 implements VirtualBoxGuestController {
             
             try{
                 
+                long timeLeft = endTime - System.currentTimeMillis();
                 IGuestProcess process = guestSession.processCreate(
                         command, 
                         args, 
                         envs,
                         Arrays.asList(ProcessCreateFlag.None),
-                        60l*1000l);
+                        timeLeft);
                 
+                timeLeft = endTime - System.currentTimeMillis();
                 //process.waitForArray(Arrays.asList(ProcessWaitForFlag.Terminate, ProcessWaitForFlag.StdErr, ProcessWaitForFlag.StdOut), 60l*1000);
                 //process.waitForArray(Arrays.asList(ProcessWaitForFlag.Terminate), 60l*1000);
-                process.waitFor(new Long(ProcessWaitForFlag.Terminate.value()), 60l*1000);
+                process.waitFor(new Long(ProcessWaitForFlag.Terminate.value()), timeLeft);
                 
                 if(process.getStatus() != ProcessStatus.TerminatedNormally){
                     

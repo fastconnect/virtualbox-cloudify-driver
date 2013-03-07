@@ -23,7 +23,6 @@ import org.cloudifysource.esc.driver.provisioning.context.ProvisioningDriverClas
 import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.VirtualBoxHostOnlyInterface;
 import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.VirtualBoxMachineInfo;
 import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.VirtualBoxService;
-import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.VirtualBoxService41;
 import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.VirtualBoxService42;
 
 public class VirtualboxCloudifyDriver extends CloudDriverSupport implements ProvisioningDriver
@@ -35,12 +34,9 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
     private static final String VBOX_HOSTONLYIF = "vbox.hostonlyinterface";
     private static final String VBOX_HEADLESS = "vbox.headless";
     private static final String VBOX_URL = "vbox.serverUrl";
-    private static final String VBOX_VERSION = "vbox.version";
     private static final String VBOX_SHARED_FOLDER = "vbox.sharedFolder";
+    private static final int DEFAULT_SHUTDOWN_TIMEOUT_MILLIS = 5 * 60 * 1000; // 5 minutes
     
-    private static final String VBOX_VERSION_41 = "4.1";
-    private static final String VBOX_VERSION_42 = "4.2";
-
     private static final ReentrantLock mutex = new ReentrantLock();
 
     private String boxesPath;
@@ -50,8 +46,7 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
     private String hostonlyifMask;
     private String hostonlyifName;
     private String hostSharedFolder;
-    private String vboxVersion;
-
+    
     private boolean headless;
 
     private String baseIp;
@@ -59,7 +54,7 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
 
     private String serverNamePrefix;
 
-    private VirtualBoxService virtualBoxService;
+    private VirtualBoxService virtualBoxService = new VirtualBoxService42();
 
     private void checkHostOnlyInterface() throws Exception {
 
@@ -134,27 +129,14 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
         else {
             this.headless = Boolean.parseBoolean(headlessString);
         }
-        
-        this.vboxVersion = (String) this.cloud.getCustom().get(VBOX_VERSION);
-        if (headlessString == null) {
-            this.vboxVersion = VBOX_VERSION_42;
-        }
-        
-        if(this.vboxVersion.equalsIgnoreCase(VBOX_VERSION_41)){
-            this.virtualBoxService = new VirtualBoxService41();
-        }
-        else if(this.vboxVersion.equalsIgnoreCase(VBOX_VERSION_42)) {
-            this.virtualBoxService = new VirtualBoxService42();
-        }
-        else {
-            throw new IllegalArgumentException("Custom field '" + VBOX_VERSION + "' should be "+VBOX_VERSION_41+" or "+VBOX_VERSION_42);
-        }
     }
 
     public MachineDetails startMachine(String locationId, long duration, TimeUnit unit)
             throws TimeoutException, CloudProvisioningException {
 
         logger.info("Start VBox machine");
+        
+        final long endTime = System.currentTimeMillis() + unit.toMillis(duration);
 
         try {
             checkHostOnlyInterface();
@@ -210,8 +192,6 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
                 }
                 addressIP = this.baseIp + "." + lastIP;
 
-                // TODO : run in a thread, so detect the Timeout
-
                 // go to the folder with "boxes"
                 vboxInfo = virtualBoxService.create(
                         machineTemplateOvfFile.toString(),
@@ -219,7 +199,8 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
                         numberOfCores,
                         machineMemoryMB,
                         this.hostonlyifName,
-                        this.hostSharedFolder);
+                        this.hostSharedFolder,
+                        endTime);
 
                 // we can release the mutex now, the VM is created
             } finally {
@@ -230,13 +211,15 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
                     vboxInfo.getMachineName(),
                     this.template.getUsername(),
                     this.template.getPassword(),
-                    headless);
+                    headless,
+                    endTime);
 
             virtualBoxService.updateHosts(
                     vboxInfo.getMachineName(),
                     this.template.getUsername(),
                     this.template.getPassword(),
-                    this.hostsFile);
+                    this.hostsFile,
+                    endTime);
             
             virtualBoxService.updateNetworkingInterfaces(
                     vboxInfo.getMachineName(),
@@ -244,12 +227,14 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
                     this.template.getPassword(),
                     addressIP,
                     this.hostonlyifMask,
-                    this.hostonlyifIP);
+                    this.hostonlyifIP,
+                    endTime);
 
             virtualBoxService.grantAccessToSharedFolder(
                     vboxInfo.getMachineName(),
                     this.template.getUsername(),
-                    this.template.getPassword());
+                    this.template.getPassword(),
+                    endTime);
             
             md = new MachineDetails();
             md.setMachineId(vboxInfo.getGuid());
@@ -276,8 +261,8 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
         try {
             checkHostOnlyInterface();
         } catch (Exception ex) {
-            logger.log(Level.SEVERE, "Unable to create host interface", ex);
-            throw new CloudProvisioningException("Unable to create host interface", ex);
+            logger.log(Level.SEVERE, "Host interface not found", ex);
+            throw new CloudProvisioningException("Host interface not found", ex);
         }
 
         final int numOfManagementMachines = cloud.getProvider().getNumberOfManagementMachines();
@@ -296,6 +281,8 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
     private MachineDetails[] doStartManagement(final long duration, final TimeUnit timeout, int numOfManagementMachines,
             ExecutorService executor) throws CloudProvisioningException {
 
+        final long endTime = System.currentTimeMillis() + timeout.toMillis(duration);
+        
         // launch machine on a thread
         final List<Future<MachineDetails>> list = new ArrayList<Future<MachineDetails>>(numOfManagementMachines);
         for (int i = 0; i < numOfManagementMachines; i++) {
@@ -333,8 +320,8 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
             for (final MachineDetails machineDetails : machines) {
                 try {
                     // TODO : do it in a thread to detect TIMEOUT
-                    virtualBoxService.stop(machineDetails.getMachineId());
-                    virtualBoxService.destroy(machineDetails.getMachineId());
+                    virtualBoxService.stop(machineDetails.getMachineId(), endTime);
+                    virtualBoxService.destroy(machineDetails.getMachineId(), endTime);
                 } catch (final Exception e) {
                     logger.log(Level.SEVERE,
                             "While shutting down machine after provisioning of management machines failed, "
@@ -352,6 +339,8 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
             throws InterruptedException, TimeoutException,
             CloudProvisioningException {
 
+        final long endTime = System.currentTimeMillis() + timeout.toMillis(duration);
+        
         logger.info("Stop VBox machine");
 
         try {
@@ -369,8 +358,8 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
 
             logger.log(Level.INFO, "Stoping machine "+machineName);
             VirtualBoxMachineInfo info = this.virtualBoxService.getInfo(machineName);
-            this.virtualBoxService.stop(info.getGuid());
-            this.virtualBoxService.destroy(info.getGuid());
+            this.virtualBoxService.stop(info.getGuid(), endTime);
+            this.virtualBoxService.destroy(info.getGuid(), endTime);
 
             return true;
         } catch (Exception ex) {
@@ -382,13 +371,15 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
     public void stopManagementMachines() throws TimeoutException,
             CloudProvisioningException {
 
+        final long endTime = System.currentTimeMillis() + DEFAULT_SHUTDOWN_TIMEOUT_MILLIS;
+        
         try {
             checkHostOnlyInterface();
 
             for (int cpt = 1; cpt <= this.cloud.getProvider().getNumberOfManagementMachines(); cpt++) {
                 VirtualBoxMachineInfo info = this.virtualBoxService.getInfo(serverNamePrefix + cpt);
-                this.virtualBoxService.stop(info.getGuid());
-                this.virtualBoxService.destroy(info.getGuid());
+                this.virtualBoxService.stop(info.getGuid(), endTime);
+                this.virtualBoxService.destroy(info.getGuid(), endTime);
             }
         } catch (final Exception e) {
             throw new CloudProvisioningException("Failed to shut down managememnt machines", e);

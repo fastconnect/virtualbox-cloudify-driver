@@ -6,30 +6,27 @@ import java.util.List;
 import java.util.logging.Level;
 
 import org.apache.commons.codec.binary.Base64;
+import org.virtualbox_4_2.VirtualBoxManager;
 
-import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.VirtualBoxGuestController;
-
-public abstract class LinuxGuest implements VirtualBoxGuest {
+public abstract class LinuxGuest extends BaseGuest {
 
     private static final java.util.logging.Logger logger = java.util.logging.Logger
             .getLogger(LinuxGuest.class.getName());
     
-    protected VirtualBoxGuestController virtualBoxGuestController;
-    
-    public LinuxGuest(VirtualBoxGuestController virtualBoxGuestController) {
-        this.virtualBoxGuestController = virtualBoxGuestController;
+    public LinuxGuest(VirtualBoxManager virtualBoxManager) {
+        super(virtualBoxManager);
     }
 
-    public void ping(String machineGuid, String login, String password) throws Exception {
+    public void ping(String machineGuid, String login, String password, long endTime) throws Exception {
         // do a ls command just to test if it's up
-        virtualBoxGuestController.executeCommand(machineGuid, login, password, "/bin/ls",Arrays.asList(new String[0]), Arrays.asList(new String[0]));
+        this.executeCommand(machineGuid, login, password, "/bin/ls",Arrays.asList(new String[0]), Arrays.asList(new String[0]), endTime);
     }
     
 
     /* (non-Javadoc)
      * @see fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.VirtualBoxGuestController#createFile(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String)
      */
-    public void createFile(String machineGuid, String login, String password, String destination, String content) throws Exception{
+    public void createFile(String machineGuid, String login, String password, String destination, String content, long endTime) throws Exception{
         
         logger.log(Level.INFO, "Trying to create file '"+destination+"' on machine '"+machineGuid+"'");
         
@@ -64,35 +61,38 @@ public abstract class LinuxGuest implements VirtualBoxGuest {
         }
         
         // create an empty file
-        virtualBoxGuestController.executeCommand(
+        this.executeCommand(
                 machineGuid,
                 login, 
                 password,
                 "/bin/touch", 
                 Arrays.asList(destination+".base64"),
-                Arrays.asList(new String[0]));
+                Arrays.asList(new String[0]),
+                endTime);
         
         // replace all chars by the base64
         // because the base64 can be too big, append each lines to the file
      
         for(String line : builder){
-            virtualBoxGuestController.executeCommand(
+            this.executeCommand(
                     machineGuid,
                     login, 
                     password,
                     "/bin/bash", 
                     Arrays.asList("-c", "echo '"+line+"' >> "+ destination+".base64"),
-                    Arrays.asList(new String[0]));
+                    Arrays.asList(new String[0]),
+                    endTime);
         }
         
         // convert the base64 file with openssl
-        virtualBoxGuestController.executeCommand(
+        this.executeCommand(
                 machineGuid,
                 login, 
                 password,
                 "/usr/bin/openssl", 
                 Arrays.asList("enc", "-base64", "-d", "-base64", "-in", destination+".base64", "-out", destination),
-                Arrays.asList(new String[0]));
+                Arrays.asList(new String[0]),
+                endTime);
         
         // remove the base64 file
 //        this.executeCommand(
@@ -107,39 +107,41 @@ public abstract class LinuxGuest implements VirtualBoxGuest {
     /* (non-Javadoc)
      * @see fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.VirtualBoxGuestController#executeScript(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String)
      */
-    public void executeScript(String machineGuid, String login, String password, String filename, String content) throws Exception {
+    public void executeScript(String machineGuid, String login, String password, String filename, String content, long endTime) throws Exception {
         
         // copy the file
-        this.createFile(machineGuid, login, password, "/tmp/"+filename, content);
+        this.createFile(machineGuid, login, password, "/tmp/"+filename, content, endTime);
         
         logger.log(Level.INFO, "Trying to execute file '"+"/tmp/"+filename+"' on VM '"+machineGuid+"'");
         
-        virtualBoxGuestController.executeCommand(
+        this.executeCommand(
                 machineGuid, 
                 login,
                 password, 
                 "/bin/chmod", 
                 Arrays.asList("a+x","/tmp/"+filename), 
-                Arrays.asList(new String[0]));
+                Arrays.asList(new String[0]),
+                endTime);
         
-        virtualBoxGuestController.executeCommand(
+        this.executeCommand(
                 machineGuid,
                 login, 
                 password, 
                 "/tmp/"+filename, 
                 Arrays.asList(new String[0]), 
-                Arrays.asList(new String[0]));
+                Arrays.asList(new String[0]),
+                endTime);
     }
     
-    public void updateHosts(String machineGuid, String login, String password, String hosts) throws InterruptedException, Exception {
+    public void updateHosts(String machineGuid, String login, String password, String hosts, long endTime) throws InterruptedException, Exception {
         
         // create the new /etc/hosts file, and copy to guest
-        createFile(machineGuid, login, password, "/tmp/hosts", hosts);
+        createFile(machineGuid, login, password, "/tmp/hosts", hosts, endTime);
         
         // create the script to update the interfaces file, and copy it to the guest
         String updatehostsScript = "#!/bin/bash\n"+
                 "cat "+"/tmp/hosts"+" | sudo tee /etc/hosts\n";
         
-        executeScript(machineGuid, login, password, "updatehosts.sh", updatehostsScript);
+        executeScript(machineGuid, login, password, "updatehosts.sh", updatehostsScript, endTime);
     }
 }

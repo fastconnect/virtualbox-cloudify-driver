@@ -5,21 +5,16 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Level;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import org.apache.commons.codec.binary.Base64;
-import org.apache.commons.lang.StringUtils;
 import org.virtualbox_4_2.CleanupMode;
 import org.virtualbox_4_2.Holder;
 import org.virtualbox_4_2.IAppliance;
 import org.virtualbox_4_2.IConsole;
-import org.virtualbox_4_2.IGuest;
-import org.virtualbox_4_2.IGuestOSType;
-import org.virtualbox_4_2.IGuestProcess;
-import org.virtualbox_4_2.IGuestSession;
 import org.virtualbox_4_2.IHostNetworkInterface;
 import org.virtualbox_4_2.IMachine;
 import org.virtualbox_4_2.IMedium;
@@ -30,9 +25,6 @@ import org.virtualbox_4_2.IVirtualSystemDescription;
 import org.virtualbox_4_2.ImportOptions;
 import org.virtualbox_4_2.MachineState;
 import org.virtualbox_4_2.NetworkAttachmentType;
-import org.virtualbox_4_2.ProcessCreateFlag;
-import org.virtualbox_4_2.ProcessStatus;
-import org.virtualbox_4_2.ProcessWaitForFlag;
 import org.virtualbox_4_2.VBoxException;
 import org.virtualbox_4_2.VirtualBoxManager;
 import org.virtualbox_4_2.VirtualSystemDescriptionType;
@@ -40,12 +32,13 @@ import org.virtualbox_4_2.jaxws.InvalidObjectFaultMsg;
 import org.virtualbox_4_2.jaxws.RuntimeFaultMsg;
 import org.virtualbox_4_2.jaxws.VboxPortType;
 
-import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.guest.UbuntuGuest;
 import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.guest.VirtualBoxGuest;
 import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.guest.VirtualBoxGuestProvider;
 
 
 public class VirtualBoxService42 implements VirtualBoxService {
+    
+    private static final int SERVER_POLLING_INTERVAL_MILLIS = 10 * 1000; // 10 seconds
     
     private static final java.util.logging.Logger logger = java.util.logging.Logger
             .getLogger(VirtualBoxService42.class.getName());
@@ -54,16 +47,13 @@ public class VirtualBoxService42 implements VirtualBoxService {
     
     private VirtualBoxManager virtualBoxManager;
     
-    private VirtualBoxGuestController virtualBoxGuestController;
-    
     private VirtualBoxGuestProvider virtualBoxGuestProvider;
     
     private static final ReentrantLock mutex = new ReentrantLock();
     
     public VirtualBoxService42() {
         this.virtualBoxManager = VirtualBoxManager.createInstance(null);
-        this.virtualBoxGuestController = new VirtualBoxGuestController42(this.virtualBoxManager);
-        this.virtualBoxGuestProvider = new VirtualBoxGuestProvider(this.virtualBoxGuestController);
+        this.virtualBoxGuestProvider = new VirtualBoxGuestProvider(this.virtualBoxManager);
     }
 
     public void connect(String url, String login, String password) throws VirtualBoxException{
@@ -140,7 +130,7 @@ public class VirtualBoxService42 implements VirtualBoxService {
          }
     }
     
-    public VirtualBoxMachineInfo create(String boxPath, String vmname, long cpus, long memory, String hostOnlyInterface, String hostSharedFolder) throws Exception {
+    public VirtualBoxMachineInfo create(String boxPath, String vmname, long cpus, long memory, String hostOnlyInterface, String hostSharedFolder, long endTime) throws Exception {
 
         logger.log(Level.INFO, "Trying to create VM '"+vmname+"' cpus:"+cpus+" memory:"+memory+" from template: "+boxPath);
         
@@ -173,11 +163,12 @@ public class VirtualBoxService42 implements VirtualBoxService {
 
         virtualSystemDescription.setFinalValues(enabled, vBoxValues.value, extraConfigValues.value);
         
+        long timeLeft = endTime - System.currentTimeMillis();
         IProgress progress = appliance.importMachines(Arrays.asList(new ImportOptions[0]));
-        progress.waitForCompletion(60*3000);
+        progress.waitForCompletion((int)timeLeft);
         
         if(!progress.getCompleted()){
-            throw new VirtualBoxException("Unable to import VM: Timeout");   
+            throw new TimeoutException("Unable to import VM: Timeout");   
         }
         
         if(progress.getResultCode() != 0){
@@ -228,7 +219,7 @@ public class VirtualBoxService42 implements VirtualBoxService {
         return result;
     }
 
-    public void destroy(String machineGuid) throws Exception {
+    public void destroy(String machineGuid, long endTime) throws Exception {
         logger.log(Level.INFO, "Trying to destroy VM '"+machineGuid+"'");
         
         IMachine m = virtualBoxManager.getVBox().findMachine(machineGuid);
@@ -238,10 +229,8 @@ public class VirtualBoxService42 implements VirtualBoxService {
         mutex.lock();
         try{
 
-            int nbTry = 0;
             boolean removed = false;
-            do{
-                nbTry++;
+            while(!removed && System.currentTimeMillis() < endTime){
                 try{
                     List<IMedium> mediums = m.unregister(CleanupMode.Full);
                     m.delete(mediums);
@@ -250,25 +239,31 @@ public class VirtualBoxService42 implements VirtualBoxService {
                 catch(VBoxException ex){
                     Matcher matcher = errorMessagePattern.matcher(ex.getMessage());
                     if(matcher.find()){
-                        Thread.sleep(5*1000);
+                        if (System.currentTimeMillis() > endTime) {
+                            throw new TimeoutException("timeout destroying server.");
+                        }
+
+                        Thread.sleep(SERVER_POLLING_INTERVAL_MILLIS);
                     }
                     else{
                         throw ex;
                     }
                 }
-            }while(!removed && nbTry < 10);
+            };
         }
         finally{
             mutex.unlock();
         }
     }
 
-    public void start(String machineGuid, String login, String password, boolean headless) throws Exception {
+    public void start(String machineGuid, String login, String password, boolean headless, long endTime) throws Exception {
         
         logger.log(Level.INFO, "Trying to start and setup VM '"+machineGuid+"'");
         
+        long timeLeft = endTime - System.currentTimeMillis();
+        
         // start the VM
-        boolean started = virtualBoxManager.startVm(machineGuid, headless ? "headless" : "gui", 60*1000);
+        boolean started = virtualBoxManager.startVm(machineGuid, headless ? "headless" : "gui", (int)timeLeft);
         if(!started){
             throw new VirtualBoxException("Unable to start VM:");
         }
@@ -277,35 +272,29 @@ public class VirtualBoxService42 implements VirtualBoxService {
         VirtualBoxGuest guest = this.virtualBoxGuestProvider.getVirtualBoxGuest(machine.getOSTypeId());
         
         // wait for the guest OS to be ready
-        int nbTry = 0;
         boolean isReady = false;
-        Exception lastException = null;
-        do{
-            nbTry++;
+        while(!isReady && System.currentTimeMillis() < endTime){
             try{
-                guest.ping(machineGuid, login, password);
+                guest.ping(machineGuid, login, password, endTime);
                 
                 isReady = true;
             }
             catch(Exception ex){
-                lastException = ex;
-                logger.log(Level.FINE, "OS not ready yet, nbTry:"+nbTry, ex);
+                logger.log(Level.FINE, "OS not ready yet", ex);
+                
+                if (System.currentTimeMillis() > endTime) {
+                    throw new TimeoutException("timeout creating server.");
+                }
+
+                Thread.sleep(SERVER_POLLING_INTERVAL_MILLIS);
             }
-            
-            if(!isReady){
-                Thread.sleep(5*1000);
-            }
-        }while(!isReady && nbTry < 10);
-        
-        if(!isReady){
-            throw new VirtualBoxException("Timeout while waiting guest to be ready", lastException);
         }
         
         // create a script to update the hostname
-        guest.updateHostname(machineGuid, login, password, machine.getName());
+        guest.updateHostname(machineGuid, login, password, machine.getName(), endTime);
     }
     
-    public void grantAccessToSharedFolder(String machineGuid, String login, String password) throws Exception{
+    public void grantAccessToSharedFolder(String machineGuid, String login, String password, long endTime) throws Exception{
      
         // add the current user to the group vboxsf to read the shared folder
         String addUserScript = "#!/bin/bash\n"+
@@ -313,10 +302,10 @@ public class VirtualBoxService42 implements VirtualBoxService {
         
         IMachine machine = this.virtualBoxManager.getVBox().findMachine(machineGuid);
         VirtualBoxGuest guest = this.virtualBoxGuestProvider.getVirtualBoxGuest(machine.getOSTypeId());
-        guest.executeScript(machineGuid, login, password, "adduser.sh", addUserScript);
+        guest.executeScript(machineGuid, login, password, "adduser.sh", addUserScript, endTime);
     }
     
-    public void updateNetworkingInterfaces(String machineGuid, String login, String password, String ip, String mask, String gateway) throws Exception {
+    public void updateNetworkingInterfaces(String machineGuid, String login, String password, String ip, String mask, String gateway, long endTime) throws Exception {
         
         logger.log(Level.INFO, "Trying to update network interfaces on VM '"+machineGuid+"'");
         
@@ -327,19 +316,19 @@ public class VirtualBoxService42 implements VirtualBoxService {
         eth1Mac = eth1Mac.substring(0,2)+":"+eth1Mac.substring(2, 4)+":"+eth1Mac.substring(4, 6)+":"+eth1Mac.substring(6, 8)+":"+eth1Mac.substring(8, 10)+":"+eth1Mac.substring(10, 12);
         
         VirtualBoxGuest guest = this.virtualBoxGuestProvider.getVirtualBoxGuest(machine.getOSTypeId());
-        guest.updateNetworkingInterfaces(machineGuid, login, password, ip, mask, gateway, eth0Mac, eth1Mac);
+        guest.updateNetworkingInterfaces(machineGuid, login, password, ip, mask, gateway, eth0Mac, eth1Mac, endTime);
     }
 
-    public void updateHosts(String machineGuid, String login, String password, String hosts) throws InterruptedException, Exception {
+    public void updateHosts(String machineGuid, String login, String password, String hosts, long endTime) throws InterruptedException, Exception {
 
         logger.log(Level.INFO, "Trying to update hosts on VM '"+machineGuid+"'");
         
         IMachine machine = this.virtualBoxManager.getVBox().findMachine(machineGuid);
         VirtualBoxGuest guest = this.virtualBoxGuestProvider.getVirtualBoxGuest(machine.getOSTypeId());
-        guest.updateHosts(machineGuid, login, password, hosts);
+        guest.updateHosts(machineGuid, login, password, hosts, endTime);
     }
 
-    public void stop(String machineGuid) throws Exception {
+    public void stop(String machineGuid, long endTime) throws Exception {
         
         logger.log(Level.INFO, "Trying to stop VM '"+machineGuid+"'");
         
@@ -354,31 +343,28 @@ public class VirtualBoxService42 implements VirtualBoxService {
             
             IProgress progress = console.powerDown();
             
-            progress.waitForCompletion(60*1000);
+            long timeLeft = endTime - System.currentTimeMillis();
+            progress.waitForCompletion((int)timeLeft);
             
             if(!progress.getCompleted()){
-                throw new VirtualBoxException("Unable to shutdown vm "+machineGuid+": Timeout");
+                throw new TimeoutException("Unable to shutdown vm "+machineGuid+": Timeout");
             }
             
             if(progress.getResultCode() != 0){
                 throw new VirtualBoxException("Unable to shutdown vm "+machineGuid+": "+progress.getErrorInfo().getText());
             }
             
-            int nbTry = 0;
             boolean off = false;
-            do{
-                nbTry++;
-                
+            while(!off && System.currentTimeMillis() < endTime){
                 off = m.getState() == MachineState.PoweredOff;
                 
                 if(!off){
-                    Thread.sleep(5*1000);
+                    if (System.currentTimeMillis() > endTime) {
+                        throw new TimeoutException("timeout stopping server.");
+                    }
+
+                    Thread.sleep(SERVER_POLLING_INTERVAL_MILLIS);
                 }
-            }
-            while(!off && nbTry < 10);
-            
-            if(!off){
-                throw new VirtualBoxException("Unable to shutdown vm "+machineGuid+": Timeout");
             }
         }finally {
             mutex.unlock();

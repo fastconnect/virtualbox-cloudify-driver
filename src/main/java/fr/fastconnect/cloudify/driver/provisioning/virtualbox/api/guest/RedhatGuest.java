@@ -1,24 +1,25 @@
 package fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.guest;
 
-import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.VirtualBoxGuestController;
+import org.virtualbox_4_2.VirtualBoxManager;
+
 
 public class RedhatGuest extends LinuxGuest {
 
-    public RedhatGuest(VirtualBoxGuestController virtualBoxGuestController) {
-        super(virtualBoxGuestController);
+    public RedhatGuest(VirtualBoxManager virtualBoxManager) {
+        super(virtualBoxManager);
     }
     
-    public void updateHostname(String machineGuid, String login, String password, String hostname) throws Exception {
+    public void updateHostname(String machineGuid, String login, String password, String hostname, long endTime) throws Exception {
      
         // create a script to update the hostname
         String updatehostnameContent = "#!/bin/bash\n"+
                 "sudo sed -i 's/\\(HOSTNAME=\\).*/\\1"+hostname+"/' /etc/sysconfig/network\n" +
                 "sudo hostname "+hostname;
         
-        executeScript(machineGuid, login, password, "updatehostname.sh", updatehostnameContent);
+        executeScript(machineGuid, login, password, "updatehostname.sh", updatehostnameContent, endTime);
     }
 
-    public void updateNetworkingInterfaces(String machineGuid, String login, String password, String ip, String mask, String gatewayIp, String eth0Mac, String eth1Mac) throws Exception {
+    public void updateNetworkingInterfaces(String machineGuid, String login, String password, String ip, String mask, String gatewayIp, String eth0Mac, String eth1Mac, long endTime) throws Exception {
      
          // create the new /etc/sysconfig/network-scripts file, and copy to guest
         String eth0Content = "DEVICE=eth0\n"+
@@ -37,8 +38,8 @@ public class RedhatGuest extends LinuxGuest {
                 "USERCTL=no";
         //NM_CONTROLLED="no"
         
-        createFile(machineGuid, login, password, "/tmp/ifcfg-eth0", eth0Content);
-        createFile(machineGuid, login, password, "/tmp/ifcfg-eth1", eth1Content);
+        createFile(machineGuid, login, password, "/tmp/ifcfg-eth0", eth0Content, endTime);
+        createFile(machineGuid, login, password, "/tmp/ifcfg-eth1", eth1Content, endTime);
         
         String updateHostnameGatewayContent = "#!/bin/bash\n"+
                 "echo GATEWAY="+gatewayIp+" | sudo tee /etc/sysconfig/network\n"+
@@ -50,13 +51,13 @@ public class RedhatGuest extends LinuxGuest {
                 "sudo cp /etc/sysconfig/network-scripts/ifcfg-eth0 /etc/sysconfig/network-scripts/ifcfg-eth1\n"+
                 "sudo chmod a+r /etc/sysconfig/network-scripts/ifcfg-eth1\n"+
                 "cat /tmp/ifcfg-eth1 | sudo tee /etc/sysconfig/network-scripts/ifcfg-eth1\n";
-        executeScript(machineGuid, login, password, "updateinterfaces.sh", updateinterfacesContent);
+        executeScript(machineGuid, login, password, "updateinterfaces.sh", updateinterfacesContent, endTime);
         
         // create the script to update the interfaces file, and copy it to the guest    
         String refreshinterfacesContent = "#!/bin/bash\n"+
                 "sudo rm /etc/udev/rules.d/70-persistent-net.rules\n"+
                 "sudo udevadm trigger\n";
-        executeScript(machineGuid, login, password, "refreshinterfaces.sh", refreshinterfacesContent);
+        executeScript(machineGuid, login, password, "refreshinterfaces.sh", refreshinterfacesContent, endTime);
         
         String test = "#!/bin/bash\n"+
                 //"sudo service network restart\n";
@@ -65,12 +66,12 @@ public class RedhatGuest extends LinuxGuest {
                 "sleep 5\n"+
                 "sudo ifup eth0\n"+
                 "sudo ifup eth1 "+ip+"\n"; 
-        executeScript(machineGuid, login, password, "test.sh", test);
+        executeScript(machineGuid, login, password, "test.sh", test, endTime);
         
         String stopfirewallContent = "#!/bin/bash\n"+
                 "sudo /etc/init.d/iptables stop\n" +
                 "sudo chkconfig iptables off\n";  
-        executeScript(machineGuid, login, password, "stopfirewall.sh", stopfirewallContent);
+        executeScript(machineGuid, login, password, "stopfirewall.sh", stopfirewallContent, endTime);
         
 
     }

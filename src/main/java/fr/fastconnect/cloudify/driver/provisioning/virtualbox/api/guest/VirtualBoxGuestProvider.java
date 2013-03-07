@@ -2,13 +2,13 @@ package fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.guest;
 
 import java.util.HashMap;
 
-import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.VirtualBoxGuestController;
+import org.virtualbox_4_2.VirtualBoxManager;
 
 public class VirtualBoxGuestProvider {
     
     private final HashMap<String, VirtualBoxGuest> registeredGuests = new HashMap<String, VirtualBoxGuest>();
     
-    public VirtualBoxGuestProvider(VirtualBoxGuestController controller) {
+    public VirtualBoxGuestProvider(VirtualBoxManager virtualBoxManager) {
         /*
 ID: Other Family: Other
 ID: Windows31 Family: Windows
@@ -89,11 +89,11 @@ ID: QNX Family: Other
 ID: JRockitVE Family: Other
          */
         
-        UbuntuGuest ubuntuGuest = new UbuntuGuest(controller); 
+        UbuntuGuest ubuntuGuest = new UbuntuGuest(virtualBoxManager); 
         registeredGuests.put("Ubuntu", ubuntuGuest);
         registeredGuests.put("Ubuntu_64", ubuntuGuest);
         
-        RedhatGuest redhatGuest = new RedhatGuest(controller);
+        RedhatGuest redhatGuest = new RedhatGuest(virtualBoxManager);
         registeredGuests.put("RedHat", redhatGuest);
         registeredGuests.put("RedHat_64", redhatGuest);
     }
