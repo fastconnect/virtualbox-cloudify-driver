@@ -137,7 +137,17 @@ public class VirtualBoxService42 implements VirtualBoxService {
         File boxPathFile = new File(boxPath);
 
         IAppliance appliance = this.virtualBoxManager.getVBox().createAppliance();
-        appliance.read(boxPathFile.getAbsolutePath());
+        
+        long timeLeft = endTime - System.currentTimeMillis();
+        IProgress progress = appliance.read(boxPathFile.getAbsolutePath());
+        progress.waitForCompletion((int)timeLeft);
+        if(!progress.getCompleted()){
+            throw new TimeoutException("Unable to import VM: Timeout");   
+        }
+        if(progress.getResultCode() != 0){
+            throw new VirtualBoxException("Unable to import VM: "+progress.getErrorInfo().getText());
+        }
+        
         appliance.interpret();
         
         IVirtualSystemDescription virtualSystemDescription = appliance.getVirtualSystemDescriptions().get(0);
@@ -163,8 +173,8 @@ public class VirtualBoxService42 implements VirtualBoxService {
 
         virtualSystemDescription.setFinalValues(enabled, vBoxValues.value, extraConfigValues.value);
         
-        long timeLeft = endTime - System.currentTimeMillis();
-        IProgress progress = appliance.importMachines(Arrays.asList(new ImportOptions[0]));
+        timeLeft = endTime - System.currentTimeMillis();
+        progress = appliance.importMachines(Arrays.asList(new ImportOptions[0]));
         progress.waitForCompletion((int)timeLeft);
         
         if(!progress.getCompleted()){

@@ -26,8 +26,7 @@ public abstract class BaseGuest implements VirtualBoxGuest {
     
     private static final ReentrantLock mutex = new ReentrantLock();
     
-    private VirtualBoxManager virtualBoxManager;
-    
+    protected VirtualBoxManager virtualBoxManager;
     
     protected BaseGuest(VirtualBoxManager virtualBoxManager) {
         this.virtualBoxManager = virtualBoxManager;
