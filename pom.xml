@@ -24,11 +24,11 @@
 	<distributionManagement>
 		<repository>
 			<id>repo.opensource.fastconnect.org</id>
-			<url>http://fastconnect.org/maven/content/repositories/opensource</url>
+			<url>https://fastconnect.org/maven/content/repositories/opensource</url>
 		</repository>
 		<snapshotRepository>
 			<id>repo.opensource.snapshot.fastconnect.org</id>
-			<url>http://fastconnect.org/maven/content/repositories/opensource-snapshot</url>
+			<url>https://fastconnect.org/maven/content/repositories/opensource-snapshot</url>
 		</snapshotRepository>
 	</distributionManagement>
 	
