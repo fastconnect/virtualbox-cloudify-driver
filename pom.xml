@@ -24,11 +24,11 @@
 	<distributionManagement>
 		<repository>
 			<id>repo.opensource.fastconnect.org</id>
-			<url>http://opensource.fastconnect.org/maven/content/repositories/opensource</url>
+			<url>http://fastconnect.org/maven/content/repositories/opensource</url>
 		</repository>
 		<snapshotRepository>
 			<id>repo.opensource.snapshot.fastconnect.org</id>
-			<url>http://opensource.fastconnect.org/maven/content/repositories/opensource-snapshot</url>
+			<url>http://fastconnect.org/maven/content/repositories/opensource-snapshot</url>
 		</snapshotRepository>
 	</distributionManagement>
 	
@@ -54,12 +54,6 @@
 		<dependency>
 			<groupId>org.virtualbox</groupId>
 			<artifactId>vboxjws</artifactId>
-			<version>4.1.4</version>
-			<classifier>vbox41</classifier>
-		</dependency>
-		<dependency>
-			<groupId>org.virtualbox</groupId>
-			<artifactId>vboxjws</artifactId>
 			<version>4.2.0</version>
 			<classifier>vbox42</classifier>
 		</dependency>
@@ -67,6 +61,7 @@
 			<groupId>commons-codec</groupId>
 			<artifactId>commons-codec</artifactId>
 			<version>20041127.091804</version>
+			<scope>provided</scope>
 		</dependency>
 		<dependency>
 			<groupId>junit</groupId>
