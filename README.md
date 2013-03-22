@@ -74,7 +74,7 @@ Here is the full URL: https://fastconnect.org/maven/content/repositories/opensou
 
 Copyright and license
 ----------------------
-Copyright (c) 2011 GigaSpaces Technologies Ltd. All rights reserved.
+Copyright (c) 2012 FastConnect SAS All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");<br/>
 you may not use this file except in compliance with the License.<br/>
