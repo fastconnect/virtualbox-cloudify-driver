@@ -1,13 +1,13 @@
 Prerequisite
 ------------
 
-* Have [Cloudify >= 2.3](http://www.gigaspaces.com/cloudify-open-paas-stack) installed.
+* Have [Cloudify >= 2.5](http://www.gigaspaces.com/cloudify-open-paas-stack) installed.
 * Have [VirtualBox](https://www.virtualbox.org/) installed. On you local machine or on a server. Tested with 4.2.4.
-* Create a ["HostOnlyInterface"](https://www.virtualbox.org/manual/ch06.html#network_hostonly) (don't need a DHCP). Ex: IP 192.168.12.1 NetMask 255.255.255.0
+* Create a ["HostOnlyInterface"](https://www.virtualbox.org/manual/ch06.html#network_hostonly) (don't need a DHCP). Ex: IP 27.0.0.1 NetMask 255.255.255.0
 * Start the [VirtualBox WebService](http://download.virtualbox.org/virtualbox/SDKRef.pdf) on the IP of the "HostOnlyInterface" you want to use. Ex:
 ```
 	$ VBoxManage setproperty websrvauthlibrary null
-	$ vboxwebsrv --host 192.168.12.1
+	$ vboxwebsrv --host 27.0.0.1
 	Oracle VM VirtualBox web service version 4.1.23
 	(C) 2005-2012 Oracle Corporation
 	All rights reserved.
@@ -28,7 +28,7 @@ Configuration
 custom ([
     "vbox.boxes.path" : "/Users/mathias/.vagrant.d/boxes/", // you can download on http://www.vagrantbox.es/
     "vbox.hostonlyinterface" : "vboxnet2", // this interface must be created manually
-    "vbox.serverUrl" : "http://192.168.12.1:18083", // must be the IP of the vboxnet2 interface
+    "vbox.serverUrl" : "http://27.0.0.1:18083", // must be the IP of the vboxnet2 interface
     "vbox.headless" : "false", // optional
     "vbox.sharedFolder" : "/Users/mathias/Work/vbox_shared" // Optional, to mount a shared folder between VMs
 ])
@@ -54,7 +54,7 @@ Here is the POM configuration to include the driver:
 	<dependency>
 		<groupId>fr.fastconnect</groupId>
 		<artifactId>virtualbox-cloudify-driver</artifactId>
-		<version>1.5</version>
+		<version>1.6</version>
 		<exclusions>
 			<exclusion>
 				<artifactId>esc</artifactId>
@@ -69,7 +69,7 @@ Here is the POM configuration to include the driver:
 </dependencies>
 ```
 
-Here is the full URL: https://fastconnect.org/maven/content/repositories/opensource/fr/fastconnect/virtualbox-cloudify-driver/1.5/virtualbox-cloudify-driver-1.5.jar
+Here is the full URL: https://fastconnect.org/maven/content/repositories/opensource/fr/fastconnect/virtualbox-cloudify-driver/1.6/virtualbox-cloudify-driver-1.6.jar
 
 
 Copyright and license
