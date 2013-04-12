@@ -10,7 +10,7 @@
 	
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-		<cloudifyVersion>2.3.0-RELEASE</cloudifyVersion>
+		<cloudifyVersion>2.5.0-RELEASE</cloudifyVersion>
 		<openspacesVersion>9.1.1-RELEASE</openspacesVersion>
 	</properties>
 	
@@ -52,10 +52,9 @@
 			<scope>provided</scope>
 		</dependency>
 		<dependency>
-			<groupId>org.virtualbox</groupId>
-			<artifactId>vboxjws</artifactId>
-			<version>4.2.0</version>
-			<classifier>vbox42</classifier>
+		    <groupId>org.virtualbox</groupId>
+		    <artifactId>vboxjws</artifactId>
+		    <version>4.2.8</version>
 		</dependency>
 		<dependency>
 			<groupId>commons-codec</groupId>

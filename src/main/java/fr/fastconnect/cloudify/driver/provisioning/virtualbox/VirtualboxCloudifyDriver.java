@@ -96,8 +96,9 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
     }
 
     @Override
-    public void setConfig(Cloud cloud, String templateName, boolean management, String serviceName) {
-        super.setConfig(cloud, templateName, management, serviceName);
+    public void setConfig(Cloud cloud, String cloudTemplate, boolean management, String serviceName, 
+            boolean performValidation) {
+        super.setConfig(cloud, cloudTemplate, management, serviceName, performValidation);
 
         if (this.management) {
             this.serverNamePrefix = this.cloud.getProvider().getManagementGroup();
@@ -388,5 +389,10 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
 
     public String getCloudName() {
         return this.cloud.getName();
+    }
+
+    public Object getComputeContext() {
+        // TODO Auto-generated method stub
+        return null;
     }
 }
