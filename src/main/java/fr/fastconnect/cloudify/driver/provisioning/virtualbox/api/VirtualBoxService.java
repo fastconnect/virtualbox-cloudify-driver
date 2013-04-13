@@ -1,6 +1,9 @@
 package fr.fastconnect.cloudify.driver.provisioning.virtualbox.api;
 
 import java.io.IOException;
+import java.util.concurrent.TimeoutException;
+
+import org.cloudifysource.esc.driver.provisioning.storage.VolumeDetails;
 
 public interface VirtualBoxService {
 
@@ -28,5 +31,21 @@ public interface VirtualBoxService {
     public void stop(String machineGuid, long endTime) throws Exception;
 
     public VirtualBoxHostOnlyInterface getHostOnlyInterface(String hostonlyifName);
+
+    public VirtualBoxVolumeInfo createVolume(String prefix, String path, int size, String hardDiskType, long endTime)  throws TimeoutException, VirtualBoxException;
+    
+    public VirtualBoxVolumeInfo[] getAllVolumesInfo() throws IOException;
+    
+    public VirtualBoxVolumeInfo[] getAllVolumesInfo(String prefix) throws IOException;
+    
+    public VirtualBoxVolumeInfo getVolumeInfo(String name) throws IOException;
+
+    public void attachVolume(String machineGuid, String volumeName, int controllerPort, long endTime);
+
+    public void detachVolume(String guid, String name, long endTime) throws VirtualBoxException;
+
+    public VirtualBoxVolumeInfo[] getVolumeInfoByMachine(String machineName);
+
+    public void deleteVolume(String volumeId, long endTime) throws VirtualBoxException, TimeoutException;
 
 }

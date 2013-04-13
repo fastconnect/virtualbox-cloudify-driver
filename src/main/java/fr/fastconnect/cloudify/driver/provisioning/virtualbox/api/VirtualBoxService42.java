@@ -11,16 +11,20 @@ import java.util.logging.Level;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.cloudifysource.esc.driver.provisioning.storage.VolumeDetails;
 import org.virtualbox_4_2.CleanupMode;
+import org.virtualbox_4_2.DeviceType;
 import org.virtualbox_4_2.Holder;
 import org.virtualbox_4_2.IAppliance;
 import org.virtualbox_4_2.IConsole;
 import org.virtualbox_4_2.IHostNetworkInterface;
 import org.virtualbox_4_2.IMachine;
 import org.virtualbox_4_2.IMedium;
+import org.virtualbox_4_2.IMediumAttachment;
 import org.virtualbox_4_2.INetworkAdapter;
 import org.virtualbox_4_2.IProgress;
 import org.virtualbox_4_2.ISession;
+import org.virtualbox_4_2.IStorageController;
 import org.virtualbox_4_2.IVirtualSystemDescription;
 import org.virtualbox_4_2.ImportOptions;
 import org.virtualbox_4_2.MachineState;
@@ -29,6 +33,7 @@ import org.virtualbox_4_2.VBoxException;
 import org.virtualbox_4_2.VirtualBoxManager;
 import org.virtualbox_4_2.VirtualSystemDescriptionType;
 import org.virtualbox_4_2.jaxws.InvalidObjectFaultMsg;
+import org.virtualbox_4_2.jaxws.MediumVariant;
 import org.virtualbox_4_2.jaxws.RuntimeFaultMsg;
 import org.virtualbox_4_2.jaxws.VboxPortType;
 
@@ -45,11 +50,15 @@ public class VirtualBoxService42 implements VirtualBoxService {
     
     private static final String cloudify_shared_folder = "cloudify";
     
+    private static final String defaultController = "SATA Controller";
+    
     private VirtualBoxManager virtualBoxManager;
     
     private VirtualBoxGuestProvider virtualBoxGuestProvider;
     
-    private static final ReentrantLock mutex = new ReentrantLock();
+    private static final ReentrantLock computeMutex = new ReentrantLock();
+    
+    private static final ReentrantLock storageMutex = new ReentrantLock();
     
     public VirtualBoxService42() {
         this.virtualBoxManager = VirtualBoxManager.createInstance(null);
@@ -192,7 +201,7 @@ public class VirtualBoxService42 implements VirtualBoxService {
         result.setGuid(machine.getId());
         result.setMachineName(vmname);
         
-        mutex.lock();
+        computeMutex.lock();
         try {
             ISession session = virtualBoxManager.openMachineSession(machine);
             machine = session.getMachine();
@@ -216,6 +225,9 @@ public class VirtualBoxService42 implements VirtualBoxService {
                     machine.createSharedFolder(cloudify_shared_folder, hostSharedFolder, true, true);
                 }
                 
+                IStorageController storageController = machine.getStorageControllerByName(defaultController);
+                storageController.setPortCount(storageController.getMaxPortCount());
+                
                 machine.saveSettings();
             }
             finally{
@@ -223,7 +235,7 @@ public class VirtualBoxService42 implements VirtualBoxService {
             }
         }
         finally {
-            mutex.unlock();
+            computeMutex.unlock();
         }
         
         return result;
@@ -236,7 +248,7 @@ public class VirtualBoxService42 implements VirtualBoxService {
         
         Pattern errorMessagePattern = Pattern.compile("Cannot unregister the machine '[^']*' while it is locked \\(0x80BB0007\\)");
         
-        mutex.lock();
+        computeMutex.lock();
         try{
 
             boolean removed = false;
@@ -262,7 +274,7 @@ public class VirtualBoxService42 implements VirtualBoxService {
             };
         }
         finally{
-            mutex.unlock();
+            computeMutex.unlock();
         }
     }
 
@@ -299,6 +311,9 @@ public class VirtualBoxService42 implements VirtualBoxService {
                 Thread.sleep(SERVER_POLLING_INTERVAL_MILLIS);
             }
         }
+        
+        
+        //machine.getGuestPropertyValue("/VirtualBox/GuestInfo/Net/0/V4/IP")
         
         // create a script to update the hostname
         guest.updateHostname(machineGuid, login, password, machine.getName(), endTime);
@@ -344,7 +359,7 @@ public class VirtualBoxService42 implements VirtualBoxService {
         
         IMachine m = virtualBoxManager.getVBox().findMachine(machineGuid);
         
-        mutex.lock();
+        computeMutex.lock();
         try{
             
             ISession session = virtualBoxManager.openMachineSession(m);
@@ -377,7 +392,7 @@ public class VirtualBoxService42 implements VirtualBoxService {
                 }
             }
         }finally {
-            mutex.unlock();
+            computeMutex.unlock();
         }
     }
     
@@ -393,5 +408,178 @@ public class VirtualBoxService42 implements VirtualBoxService {
         }
         
         return null;
+    }
+    
+    public VirtualBoxVolumeInfo[] getAllVolumesInfo() throws IOException {
+        return this.getAllVolumesInfo(null);
+    }
+
+    public VirtualBoxVolumeInfo[] getAllVolumesInfo(String prefix) throws IOException {
+
+        ArrayList<VirtualBoxVolumeInfo> result = new ArrayList<VirtualBoxVolumeInfo>();
+
+        for(IMedium v : this.virtualBoxManager.getVBox().getHardDisks()){
+            
+            VirtualBoxVolumeInfo info = new VirtualBoxVolumeInfo();
+            info.setGuid(v.getId());
+            info.setName(v.getName());
+            info.setLocation(v.getLocation());
+            info.setSize((int)(v.getSize() / (1024*1024*1024)));
+            
+            if (prefix != null) {
+                if (info.getName().startsWith(prefix)) {
+                    result.add(info);
+                }
+            }
+            else {
+                result.add(info);
+            }
+        }
+        
+        return result.toArray(new VirtualBoxVolumeInfo[0]);
+    }
+
+    public VirtualBoxVolumeInfo getVolumeInfo(String name) throws IOException {
+        for (VirtualBoxVolumeInfo info : getAllVolumesInfo()) {
+            if (info.getName().equals(name)) {
+                return info;
+            }
+        }
+
+        return null;
+    }
+
+    public VirtualBoxVolumeInfo createVolume(String prefix, String path, int size, String hardDiskType, long endTime) throws TimeoutException, VirtualBoxException {
+        
+        storageMutex.lock();
+        
+        try{
+            int lastId = -1;
+            try {
+                for(VirtualBoxVolumeInfo v : getAllVolumesInfo(prefix)){
+                    String idString = v.getName().substring(prefix.length(), v.getName().length()-prefix.length());
+                    int id = Integer.parseInt(idString);
+                    if(id > lastId){
+                        lastId = id;
+                    }
+                }
+            } catch (NumberFormatException e) {
+                throw new VirtualBoxException("Unable to list exiting volumes", e);
+            } catch (IOException e) {
+                throw new VirtualBoxException("Unable to list exiting volumes", e);
+            }
+            
+            String name = prefix+(lastId+1);
+            
+            String fullPath = name;
+            if(path != null && path.length() > 0){
+                fullPath = new File(path, name).getAbsolutePath();
+            }
+            
+            IMedium medium = this.virtualBoxManager.getVBox().createHardDisk(hardDiskType, fullPath);
+            Long sizeInBytes = size * 1024l * 1024l * 1024l;
+            IProgress progress = medium.createBaseStorage(sizeInBytes, (long)org.virtualbox_4_2.MediumVariant.Standard.value());
+            
+            long timeLeft = endTime - System.currentTimeMillis();
+            progress.waitForCompletion((int)timeLeft);
+            
+            if(!progress.getCompleted()){
+                throw new TimeoutException("Unable to create volume "+fullPath+": Timeout");
+            }
+            
+            if(progress.getResultCode() != 0){
+                throw new VirtualBoxException("Unable to create volume "+fullPath+": "+progress.getErrorInfo().getText());
+            }
+            
+            VirtualBoxVolumeInfo info = new VirtualBoxVolumeInfo();
+            info.setGuid(medium.getId());
+            info.setName(medium.getName());
+            info.setLocation(medium.getLocation());
+            info.setSize(size);
+            
+            return info;
+        }finally {
+            storageMutex.unlock();
+        }
+    }
+    
+    public void attachVolume(String machineGuid, String volumeName, int controllerPort, long endTime) {
+        
+        IMedium medium = null;
+        for(IMedium m : virtualBoxManager.getVBox().getHardDisks()){
+            if(m.getName().equals(volumeName)){
+                medium = m;
+                break;
+            }
+        }
+        
+        IMachine m = virtualBoxManager.getVBox().findMachine(machineGuid);
+        
+        m.attachDevice(defaultController, controllerPort, 0, DeviceType.HardDisk, medium);
+    }
+    
+    public void detachVolume(String machineGuid, String volumeName, long endTime) throws VirtualBoxException {
+        
+        IMachine m = virtualBoxManager.getVBox().findMachine(machineGuid);
+        
+        int controllerPort = -1;
+        for(IMediumAttachment mediumAttachment : m.getMediumAttachmentsOfController(defaultController)){
+            if(mediumAttachment.getMedium().getName().equals(volumeName)){
+                controllerPort = mediumAttachment.getPort();
+                break;
+            }
+        }
+        
+        if(controllerPort == -1){
+            throw new VirtualBoxException("Volume "+volumeName+" not attached to VM "+m.getId());
+        }
+        
+        m.attachDevice(defaultController, controllerPort, 0, DeviceType.HardDisk, null);
+    }
+    
+    public VirtualBoxVolumeInfo[] getVolumeInfoByMachine(String machineName){
+        IMachine m = virtualBoxManager.getVBox().findMachine(machineName);
+        
+        ArrayList<VirtualBoxVolumeInfo> result = new ArrayList<VirtualBoxVolumeInfo>();
+        
+        for(IMediumAttachment mediumAttachment : m.getMediumAttachmentsOfController(defaultController)){
+            VirtualBoxVolumeInfo info = new VirtualBoxVolumeInfo();
+            info.setGuid(mediumAttachment.getMedium().getId());
+            info.setName(mediumAttachment.getMedium().getName());
+            info.setLocation(mediumAttachment.getMedium().getLocation());
+            info.setSize((int)(mediumAttachment.getMedium().getSize() / (1024*1024*1024)));
+            
+            result.add(info);
+        }
+        
+        return result.toArray(new VirtualBoxVolumeInfo[0]);
+    }
+    
+    public void deleteVolume(String volumeId, long endTime) throws VirtualBoxException, TimeoutException{
+        IMedium medium = null;
+        
+        for(IMedium m : this.virtualBoxManager.getVBox().getHardDisks()){
+            if(m.getId().equals(volumeId)){
+                medium = m;
+                break;
+            }
+        }
+        
+        if(medium == null){
+            throw new VirtualBoxException("No volume with ID "+volumeId);
+        }
+        
+        IProgress progress = medium.deleteStorage();
+        
+        long timeLeft = endTime - System.currentTimeMillis();
+        progress.waitForCompletion((int)timeLeft);
+        
+        if(!progress.getCompleted()){
+            throw new TimeoutException("Unable to delete volume "+volumeId+": Timeout");
+        }
+        
+        if(progress.getResultCode() != 0){
+            throw new VirtualBoxException("Unable to delete volume "+volumeId+": "+progress.getErrorInfo().getText());
+        }
     }
 }
