@@ -2,7 +2,7 @@
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>fr.fastconnect</groupId>
 	<artifactId>virtualbox-cloudify-driver</artifactId>
-	<version>1.7</version>
+	<version>1.8-SNAPSHOT</version>
 	
 	<scm>
 		<connection>scm:git:git@github.com:fastconnect/virtualbox-cloudify-driver.git</connection>
