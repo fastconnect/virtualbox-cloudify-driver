@@ -364,34 +364,39 @@ public class VirtualBoxService42 implements VirtualBoxService {
             
             ISession session = virtualBoxManager.openMachineSession(m);
             m = session.getMachine();
-            IConsole console = session.getConsole();
             
-            IProgress progress = console.powerDown();
-            
-            long timeLeft = endTime - System.currentTimeMillis();
-            progress.waitForCompletion((int)timeLeft);
-            
-            if(!progress.getCompleted()){
-                throw new TimeoutException("Unable to shutdown vm "+machineGuid+": Timeout");
-            }
-            
-            if(progress.getResultCode() != 0){
-                throw new VirtualBoxException("Unable to shutdown vm "+machineGuid+": "+progress.getErrorInfo().getText());
-            }
-            
-            boolean off = false;
-            while(!off && System.currentTimeMillis() < endTime){
-                off = m.getState() == MachineState.PoweredOff;
+            try {
+                IConsole console = session.getConsole();
                 
-                if(!off){
-                    if (System.currentTimeMillis() > endTime) {
-                        throw new TimeoutException("timeout stopping server.");
-                    }
-
-                    Thread.sleep(SERVER_POLLING_INTERVAL_MILLIS);
+                IProgress progress = console.powerDown();
+                
+                long timeLeft = endTime - System.currentTimeMillis();
+                progress.waitForCompletion((int)timeLeft);
+                
+                if(!progress.getCompleted()){
+                    throw new TimeoutException("Unable to shutdown vm "+machineGuid+": Timeout");
                 }
+                
+                if(progress.getResultCode() != 0){
+                    throw new VirtualBoxException("Unable to shutdown vm "+machineGuid+": "+progress.getErrorInfo().getText());
+                }
+                
+                boolean off = false;
+                while(!off && System.currentTimeMillis() < endTime){
+                    off = m.getState() == MachineState.PoweredOff;
+                    
+                    if(!off){
+                        if (System.currentTimeMillis() > endTime) {
+                            throw new TimeoutException("timeout stopping server.");
+                        }
+    
+                        Thread.sleep(SERVER_POLLING_INTERVAL_MILLIS);
+                    }
+                }
+            } finally {
+                this.virtualBoxManager.closeMachineSession(session);
             }
-        }finally {
+        } finally {
             computeMutex.unlock();
         }
     }
@@ -457,7 +462,8 @@ public class VirtualBoxService42 implements VirtualBoxService {
             int lastId = -1;
             try {
                 for(VirtualBoxVolumeInfo v : getAllVolumesInfo(prefix)){
-                    String idString = v.getName().substring(prefix.length(), v.getName().length()-prefix.length());
+                    
+                    String idString = v.getName().substring(prefix.length());
                     int id = Integer.parseInt(idString);
                     if(id > lastId){
                         lastId = id;
@@ -503,7 +509,7 @@ public class VirtualBoxService42 implements VirtualBoxService {
         }
     }
     
-    public void attachVolume(String machineGuid, String volumeName, int controllerPort, long endTime) {
+    public void attachVolume(String machineGuid, String volumeName, int controllerPort, long endTime) throws Exception {
         
         IMedium medium = null;
         for(IMedium m : virtualBoxManager.getVBox().getHardDisks()){
@@ -514,11 +520,19 @@ public class VirtualBoxService42 implements VirtualBoxService {
         }
         
         IMachine m = virtualBoxManager.getVBox().findMachine(machineGuid);
+        ISession session = virtualBoxManager.openMachineSession(m);
+        m = session.getMachine();
         
-        m.attachDevice(defaultController, controllerPort, 0, DeviceType.HardDisk, medium);
+        try {
+            m.attachDevice(defaultController, controllerPort, 0, DeviceType.HardDisk, medium);
+            
+            m.saveSettings();
+        } finally{
+            this.virtualBoxManager.closeMachineSession(session);
+        }
     }
     
-    public void detachVolume(String machineGuid, String volumeName, long endTime) throws VirtualBoxException {
+    public void detachVolume(String machineGuid, String volumeName, long endTime) throws Exception {
         
         IMachine m = virtualBoxManager.getVBox().findMachine(machineGuid);
         
@@ -534,7 +548,16 @@ public class VirtualBoxService42 implements VirtualBoxService {
             throw new VirtualBoxException("Volume "+volumeName+" not attached to VM "+m.getId());
         }
         
-        m.attachDevice(defaultController, controllerPort, 0, DeviceType.HardDisk, null);
+        ISession session = virtualBoxManager.openMachineSession(m);
+        m = session.getMachine();
+        
+        try {
+            m.attachDevice(defaultController, controllerPort, 0, DeviceType.HardDisk, null);
+            
+            m.saveSettings();
+        } finally{
+            this.virtualBoxManager.closeMachineSession(session);
+        }
     }
     
     public VirtualBoxVolumeInfo[] getVolumeInfoByMachine(String machineName){

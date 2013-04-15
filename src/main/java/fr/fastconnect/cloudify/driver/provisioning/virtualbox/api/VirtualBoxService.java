@@ -40,9 +40,9 @@ public interface VirtualBoxService {
     
     public VirtualBoxVolumeInfo getVolumeInfo(String name) throws IOException;
 
-    public void attachVolume(String machineGuid, String volumeName, int controllerPort, long endTime);
+    public void attachVolume(String machineGuid, String volumeName, int controllerPort, long endTime) throws Exception;
 
-    public void detachVolume(String guid, String name, long endTime) throws VirtualBoxException;
+    public void detachVolume(String guid, String name, long endTime) throws Exception;
 
     public VirtualBoxVolumeInfo[] getVolumeInfoByMachine(String machineName);
 

@@ -123,6 +123,8 @@ public class VirtualBoxStorageDriver extends BaseStorageDriver implements Storag
             
         } catch (IOException e) {
             throw new StorageProvisioningException(e);
+        } catch (Exception e) {
+            throw new StorageProvisioningException(e);
         }
 
     }
@@ -155,6 +157,8 @@ public class VirtualBoxStorageDriver extends BaseStorageDriver implements Storag
         } catch (IOException e) {
             throw new StorageProvisioningException(e);
         } catch (VirtualBoxException e) {
+            throw new StorageProvisioningException(e);
+        } catch (Exception e) {
             throw new StorageProvisioningException(e);
         }
     }
