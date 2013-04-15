@@ -1,3 +1,4 @@
+
 cloud {
     // Mandatory. The name of the cloud, as it will appear in the Cloudify UI.
     name = "vbox"
@@ -6,11 +7,14 @@ cloud {
      * General configuration information about the cloud driver implementation.
      */
     configuration {
-        className "fr.fastconnect.cloudify.provisioning.virtualbox.VirtualboxCloudifyDriver"
+        className "fr.fastconnect.cloudify.driver.provisioning.virtualbox.VirtualboxCloudifyDriver"
+        storageClassName "fr.fastconnect.cloudify.driver.provisioning.virtualbox.VirtualBoxStorageDriver"
         // Optional. The template name for the management machines. Defaults to the first template in the templates section below.
-        managementMachineTemplate "LARGE_LINUX"
+        managementMachineTemplate "MEDIUM_LINUX"
+        //managementStorageTemplate "SMALL_BLOCK"
         // Optional. Indicates whether internal cluster communications should use the machine private IP. Defaults to true.
         connectToPrivateIp false
+        persistentStoragePath null
     }
 
     /*************
@@ -22,9 +26,8 @@ cloud {
         provider "virtualbox"
 
         // Mandatory. The HTTP/S URL where cloudify can be downloaded from by newly started machines.
-        cloudifyUrl "http://repository.cloudifysource.org/org/cloudifysource/2.1.1/gigaspaces-cloudify-2.1.1-ga-b1400.zip" 
-        // create a archive with the driver in folder lib/plateform/esm
-        //cloudifyOverridesUrl "https://opensource.fastconnect.org/maven/content/repositories/opensource/fr/fastconnect/cloudify-overrides/1.0/cloudify-overrides-1.0-gigaspaces_overrides.zip"        
+        //cloudifyUrl "gigaspaces-cloudify-2.5.0-ga-b4010.zip"
+        //cloudifyOverridesUrl "gigaspaces_overrides.zip"
         
         // Mandatory. The prefix for new machines started for servies.
         machineNamePrefix "app-agent-"
@@ -44,7 +47,7 @@ cloud {
         numberOfManagementMachines 1
         zones (["agent"])
 
-        reservedMemoryCapacityPerMachineInMB 1024
+        reservedMemoryCapacityPerMachineInMB 512
 
     }
 
@@ -65,96 +68,50 @@ cloud {
         //keyFile "ENTER_KEY_FILE"
     }
 
+    cloudStorage {
+        templates ([
+                
+            SMALL_BLOCK : storageTemplate{
+                deleteOnExit true
+                size 1
+                path "/home/mathias/vagrant-volumes/"
+                namePrefix "cloudify-storage-volume"
+                deviceName "/dev/sdb"
+                fileSystemType "ext4"
+                custom ([:])
+            }
+        ])
+    }
 
     /***********
-     * Cloud machine templates available with this cloud.
+     * Cloud machine templates available with this cloud. 
      */
-    templates ([
-                // Mandatory. Template Name.
-                LARGE_LINUX : template{
-                    // Mandatory. Image ID. Points to a Vmware Template name precreated.
-                    imageId "precise64"
-                    // Mandatory. Amount of RAM available to machine.
-                    machineMemoryMB 4096
-                    // Mandatory. Hardware ID.
-                    //hardwareId "m1.small"
-                    // Optional. Location ID.
-                    //locationId "us-east-1"
-                    username  "vagrant"
-                    password  "vagrant"
-                    // Mandatory. Files from the local directory will be copied to this directory on the remote machine.
-                    remoteDirectory "/tmp/gs-files"
-                    // Mandatory. All files from this LOCAL directory will be copied to the remote machine directory.
-                    localDirectory "upload"
-                    
-                    // Optional. Overrides to default cloud driver behavior.
-                    // When used with the default driver, maps to the overrides properties passed to the ComputeServiceContext a
-                    options ([:])
-                    overrides ([:])
-
-
-
-                },
-                MEDIUM_LINUX : template{
-                    // Mandatory. Image ID.
-                    imageId "precise64"
-                    // Mandatory. Amount of RAM available to machine.
-                    machineMemoryMB 2048
-                    // Mandatory. Hardware ID.
-                    //hardwareId "m1.small"
-                    // Optional. Location ID.
-                    //locationId "us-east-1"
-                    username  "vagrant"
-                    password  "vagrant"
-                    // Mandatory. Files from the local directory will be copied to this directory on the remote machine.
-                    remoteDirectory "/tmp/gs-files"
-                    // Mandatory. All files from this LOCAL directory will be copied to the remote machine directory.
-                    localDirectory "upload"
-                    
-                    // Optional. Overrides to default cloud driver behavior.
-                    // When used with the default driver, maps to the overrides properties passed to the ComputeServiceContext a
-                    options ([:])
-                    overrides ([:])
-
-
-
-                },
-                SMALL_LINUX : template{
-                    // Mandatory. Image ID.
-                    imageId "precise64"
-                    // Mandatory. Amount of RAM available to machine.
-                    machineMemoryMB 1024
-                    // Mandatory. Hardware ID.
-                    //hardwareId "m1.small"
-                    // Optional. Location ID.
-                    //locationId "us-east-1"
-                    username  "vagrant"
-                    password  "vagrant"
-                    // Mandatory. Files from the local directory will be copied to this directory on the remote machine.
-                    remoteDirectory "/tmp/gs-files"
-                    // Mandatory. All files from this LOCAL directory will be copied to the remote machine directory.
-                    localDirectory "upload"
-                    
-                    // Optional. Overrides to default cloud driver behavior.
-                    // When used with the default driver, maps to the overrides properties passed to the ComputeServiceContext a
-                    options ([:])
-                    overrides ([:])
-
-
-
-                }
-            ])
-
+    cloudCompute {
+        templates ([
+            SMALL_LINUX : computeTemplate{
+                imageId "precise64"
+                machineMemoryMB 1024
+                username  "vagrant"
+                password  "vagrant"
+                remoteDirectory "/home/vagrant/gs-files"
+                localDirectory "upload"
+                // enable sudo.
+                privileged true 
+                options ([:])
+                overrides ([:])
+            }
+        ])
+    }
 
     /*****************
-     * Optional. Custom properties used to extend existing drivers or create new ones.
+     * Optional. Custom properties used to extend existing drivers or create new ones. 
      */
-    custom ([
-        "vbox.boxes.path" : "/Users/mathias/.vagrant.d/boxes/", // you can download on http://www.vagrantbox.es/
-        "vbox.hostonlyinterface" : "vboxnet2", // this interface must be created manually
-        "vbox.serverUrl" : "http://192.168.12.1:18083", // must be the IP of the vboxnet2 interface
-        "vbox.version" : "4.2", // optional, default 4.1, possible: 4.1 or 4.2
-        "vbox.headless" : "false", // optional
-        "vbox.sharedFolder" : "/Users/mathias/Work/vbox_shared" // Optional, to mount a shared folder between VMs
-        ])
+    custom ([ 
+        "vbox.boxes.path" : BOXES_PATH,
+        "vbox.hostonlyinterface" : HOST_ONLY_INTERFACE,
+        "vbox.serverUrl" : SERVER_URL,
+        "vbox.headless" : "true", // optional
+        "vbox.sharedFolder" : SHARED_FOLDER // Optional
+    ])
 }
+
