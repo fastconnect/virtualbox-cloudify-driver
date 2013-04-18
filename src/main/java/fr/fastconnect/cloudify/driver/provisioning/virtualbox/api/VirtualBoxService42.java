@@ -11,7 +11,6 @@ import java.util.logging.Level;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import org.cloudifysource.esc.driver.provisioning.storage.VolumeDetails;
 import org.virtualbox_4_2.CleanupMode;
 import org.virtualbox_4_2.DeviceType;
 import org.virtualbox_4_2.Holder;
@@ -27,13 +26,13 @@ import org.virtualbox_4_2.ISession;
 import org.virtualbox_4_2.IStorageController;
 import org.virtualbox_4_2.IVirtualSystemDescription;
 import org.virtualbox_4_2.ImportOptions;
+import org.virtualbox_4_2.LockType;
 import org.virtualbox_4_2.MachineState;
 import org.virtualbox_4_2.NetworkAttachmentType;
 import org.virtualbox_4_2.VBoxException;
 import org.virtualbox_4_2.VirtualBoxManager;
 import org.virtualbox_4_2.VirtualSystemDescriptionType;
 import org.virtualbox_4_2.jaxws.InvalidObjectFaultMsg;
-import org.virtualbox_4_2.jaxws.MediumVariant;
 import org.virtualbox_4_2.jaxws.RuntimeFaultMsg;
 import org.virtualbox_4_2.jaxws.VboxPortType;
 
@@ -56,9 +55,40 @@ public class VirtualBoxService42 implements VirtualBoxService {
     
     private VirtualBoxGuestProvider virtualBoxGuestProvider;
     
+    private final ReentrantLock virtualboxManagerLock = new ReentrantLock();
+    
     private static final ReentrantLock computeMutex = new ReentrantLock();
     
     private static final ReentrantLock storageMutex = new ReentrantLock();
+    
+    private String lastUrl;
+    
+    private String lastLogin;
+    
+    private String lastPassword;
+    
+    protected VirtualBoxManager getVirtualBoxManager() throws VirtualBoxException{
+        
+        virtualboxManagerLock.lock();
+        try{
+            String apiVersion = virtualBoxManager.getVBox().getAPIVersion();
+            logger.log(Level.FINE, "VirtualBox version: "+apiVersion);
+        }
+        catch(VBoxException ex) {
+            logger.log(Level.SEVERE, "Unable to communicate with VirtualBox WebService, maybe disconnected.");
+            if(lastUrl != null){
+                this.connect(lastUrl, lastLogin, lastPassword);
+            }
+            else {
+                throw new VirtualBoxException(ex);
+            }
+        }
+        finally{
+            virtualboxManagerLock.unlock();
+        }
+        
+        return virtualBoxManager;
+    }
     
     public VirtualBoxService42() {
         this.virtualBoxManager = VirtualBoxManager.createInstance(null);
@@ -66,6 +96,11 @@ public class VirtualBoxService42 implements VirtualBoxService {
     }
 
     public void connect(String url, String login, String password) throws VirtualBoxException{
+
+        this.lastLogin = login;
+        this.lastPassword = password;
+        this.lastUrl = url;
+        
         try{
             logger.log(Level.INFO, "Trying to connect to "+url+" using login: "+login);
             this.virtualBoxManager.connect(url, login, password);
@@ -75,15 +110,17 @@ public class VirtualBoxService42 implements VirtualBoxService {
         }
     }
     
-    public VirtualBoxMachineInfo[] getAll() throws IOException {
+    public VirtualBoxMachineInfo[] getAll() throws VirtualBoxException {
         return this.getAll(null);
     }
 
-    public VirtualBoxMachineInfo[] getAll(String prefix) throws IOException {
+    public VirtualBoxMachineInfo[] getAll(String prefix) throws VirtualBoxException {
 
         ArrayList<VirtualBoxMachineInfo> result = new ArrayList<VirtualBoxMachineInfo>();
 
-        for(IMachine m : this.virtualBoxManager.getVBox().getMachines()){
+        VirtualBoxManager manager = this.getVirtualBoxManager();
+        
+        for(IMachine m : manager.getVBox().getMachines()){
             VirtualBoxMachineInfo vboxInfo = new VirtualBoxMachineInfo();
             vboxInfo.setGuid(m.getId());
             vboxInfo.setMachineName(m.getName());
@@ -101,7 +138,8 @@ public class VirtualBoxService42 implements VirtualBoxService {
         return result.toArray(new VirtualBoxMachineInfo[0]);
     }
 
-    public VirtualBoxMachineInfo getInfo(String name) throws IOException {
+    public VirtualBoxMachineInfo getInfo(String name) throws VirtualBoxException {
+        
         for (VirtualBoxMachineInfo info : getAll()) {
             if (info.getMachineName().equals(name)) {
                 return info;
@@ -145,7 +183,9 @@ public class VirtualBoxService42 implements VirtualBoxService {
         
         File boxPathFile = new File(boxPath);
 
-        IAppliance appliance = this.virtualBoxManager.getVBox().createAppliance();
+        VirtualBoxManager manager = this.getVirtualBoxManager();
+        
+        IAppliance appliance = manager.getVBox().createAppliance();
         
         long timeLeft = endTime - System.currentTimeMillis();
         IProgress progress = appliance.read(boxPathFile.getAbsolutePath());
@@ -196,14 +236,14 @@ public class VirtualBoxService42 implements VirtualBoxService {
         
         String machineName = appliance.getMachines().get(0);
         
-        IMachine machine = virtualBoxManager.getVBox().findMachine(machineName);
+        IMachine machine = manager.getVBox().findMachine(machineName);
         VirtualBoxMachineInfo result = new VirtualBoxMachineInfo();
         result.setGuid(machine.getId());
         result.setMachineName(vmname);
         
         computeMutex.lock();
         try {
-            ISession session = virtualBoxManager.openMachineSession(machine);
+            ISession session = manager.openMachineSession(machine);
             machine = session.getMachine();
             
             try{
@@ -231,7 +271,7 @@ public class VirtualBoxService42 implements VirtualBoxService {
                 machine.saveSettings();
             }
             finally{
-                this.virtualBoxManager.closeMachineSession(session);
+                session.unlockMachine();
             }
         }
         finally {
@@ -244,34 +284,26 @@ public class VirtualBoxService42 implements VirtualBoxService {
     public void destroy(String machineGuid, long endTime) throws Exception {
         logger.log(Level.INFO, "Trying to destroy VM '"+machineGuid+"'");
         
-        IMachine m = virtualBoxManager.getVBox().findMachine(machineGuid);
+        VirtualBoxManager manager = this.getVirtualBoxManager();
         
-        Pattern errorMessagePattern = Pattern.compile("Cannot unregister the machine '[^']*' while it is locked \\(0x80BB0007\\)");
+        IMachine m = manager.getVBox().findMachine(machineGuid);
         
         computeMutex.lock();
+        
         try{
 
-            boolean removed = false;
-            while(!removed && System.currentTimeMillis() < endTime){
-                try{
-                    List<IMedium> mediums = m.unregister(CleanupMode.Full);
-                    m.delete(mediums);
-                    removed = true;
-                }
-                catch(VBoxException ex){
-                    Matcher matcher = errorMessagePattern.matcher(ex.getMessage());
-                    if(matcher.find()){
-                        if (System.currentTimeMillis() > endTime) {
-                            throw new TimeoutException("timeout destroying server.");
-                        }
-
-                        Thread.sleep(SERVER_POLLING_INTERVAL_MILLIS);
-                    }
-                    else{
-                        throw ex;
-                    }
-                }
-            };
+            List<IMedium> mediums = m.unregister(CleanupMode.Full);
+            
+            IProgress progress = m.delete(mediums);
+            long timeLeft = endTime - System.currentTimeMillis();
+            progress.waitForCompletion((int)timeLeft);
+            
+            if(!progress.getCompleted()){
+                throw new TimeoutException("Unable to delete VM: Timeout");   
+            }
+            if(progress.getResultCode() != 0){
+                throw new VirtualBoxException("Unable to delete VM: "+progress.getErrorInfo().getText());
+            }
         }
         finally{
             computeMutex.unlock();
@@ -282,15 +314,17 @@ public class VirtualBoxService42 implements VirtualBoxService {
         
         logger.log(Level.INFO, "Trying to start and setup VM '"+machineGuid+"'");
         
+        VirtualBoxManager manager = this.getVirtualBoxManager();
+        
         long timeLeft = endTime - System.currentTimeMillis();
         
         // start the VM
-        boolean started = virtualBoxManager.startVm(machineGuid, headless ? "headless" : "gui", (int)timeLeft);
+        boolean started = manager.startVm(machineGuid, headless ? "headless" : "gui", (int)timeLeft);
         if(!started){
             throw new VirtualBoxException("Unable to start VM:");
         }
         
-        IMachine machine = virtualBoxManager.getVBox().findMachine(machineGuid);        
+        IMachine machine = manager.getVBox().findMachine(machineGuid);        
         VirtualBoxGuest guest = this.virtualBoxGuestProvider.getVirtualBoxGuest(machine.getOSTypeId());
         
         // wait for the guest OS to be ready
@@ -325,7 +359,9 @@ public class VirtualBoxService42 implements VirtualBoxService {
         String addUserScript = "#!/bin/bash\n"+
                 "sudo usermod -a -G vboxsf $(whoami)";
         
-        IMachine machine = this.virtualBoxManager.getVBox().findMachine(machineGuid);
+        VirtualBoxManager manager = this.getVirtualBoxManager();
+        
+        IMachine machine = manager.getVBox().findMachine(machineGuid);
         VirtualBoxGuest guest = this.virtualBoxGuestProvider.getVirtualBoxGuest(machine.getOSTypeId());
         guest.executeScript(machineGuid, login, password, "adduser.sh", addUserScript, endTime);
     }
@@ -334,7 +370,9 @@ public class VirtualBoxService42 implements VirtualBoxService {
         
         logger.log(Level.INFO, "Trying to update network interfaces on VM '"+machineGuid+"'");
         
-        IMachine machine = this.virtualBoxManager.getVBox().findMachine(machineGuid);
+        VirtualBoxManager manager = this.getVirtualBoxManager();
+        
+        IMachine machine = manager.getVBox().findMachine(machineGuid);
         String eth0Mac = machine.getNetworkAdapter(0l).getMACAddress();
         eth0Mac = eth0Mac.substring(0,2)+":"+eth0Mac.substring(2, 4)+":"+eth0Mac.substring(4, 6)+":"+eth0Mac.substring(6, 8)+":"+eth0Mac.substring(8, 10)+":"+eth0Mac.substring(10, 12);
         String eth1Mac = machine.getNetworkAdapter(1l).getMACAddress();
@@ -348,7 +386,9 @@ public class VirtualBoxService42 implements VirtualBoxService {
 
         logger.log(Level.INFO, "Trying to update hosts on VM '"+machineGuid+"'");
         
-        IMachine machine = this.virtualBoxManager.getVBox().findMachine(machineGuid);
+        VirtualBoxManager manager = this.getVirtualBoxManager();
+        
+        IMachine machine = manager.getVBox().findMachine(machineGuid);
         VirtualBoxGuest guest = this.virtualBoxGuestProvider.getVirtualBoxGuest(machine.getOSTypeId());
         guest.updateHosts(machineGuid, login, password, hosts, endTime);
     }
@@ -357,14 +397,15 @@ public class VirtualBoxService42 implements VirtualBoxService {
         
         logger.log(Level.INFO, "Trying to stop VM '"+machineGuid+"'");
         
-        IMachine m = virtualBoxManager.getVBox().findMachine(machineGuid);
+        VirtualBoxManager manager = this.getVirtualBoxManager();
+        
+        IMachine m = manager.getVBox().findMachine(machineGuid);
         
         computeMutex.lock();
         try{
             
-            ISession session = virtualBoxManager.openMachineSession(m);
-            m = session.getMachine();
-            
+            ISession session = manager.openMachineSession(m);
+            //m = session.getMachine();
             try {
                 IConsole console = session.getConsole();
                 
@@ -380,30 +421,19 @@ public class VirtualBoxService42 implements VirtualBoxService {
                 if(progress.getResultCode() != 0){
                     throw new VirtualBoxException("Unable to shutdown vm "+machineGuid+": "+progress.getErrorInfo().getText());
                 }
-                
-                boolean off = false;
-                while(!off && System.currentTimeMillis() < endTime){
-                    off = m.getState() == MachineState.PoweredOff;
-                    
-                    if(!off){
-                        if (System.currentTimeMillis() > endTime) {
-                            throw new TimeoutException("timeout stopping server.");
-                        }
-    
-                        Thread.sleep(SERVER_POLLING_INTERVAL_MILLIS);
-                    }
-                }
             } finally {
-                this.virtualBoxManager.closeMachineSession(session);
+                session.unlockMachine();
             }
         } finally {
             computeMutex.unlock();
         }
     }
     
-    public VirtualBoxHostOnlyInterface getHostOnlyInterface(String hostonlyifName) {
+    public VirtualBoxHostOnlyInterface getHostOnlyInterface(String hostonlyifName) throws VirtualBoxException {
         
-        for(IHostNetworkInterface hostonlyif : this.virtualBoxManager.getVBox().getHost().getNetworkInterfaces()){
+        VirtualBoxManager manager = this.getVirtualBoxManager();
+        
+        for(IHostNetworkInterface hostonlyif : manager.getVBox().getHost().getNetworkInterfaces()){
             if(hostonlyif.getName().equals(hostonlyifName)){
                 VirtualBoxHostOnlyInterface result = new VirtualBoxHostOnlyInterface();
                 result.setIp(hostonlyif.getIPAddress());
@@ -415,15 +445,17 @@ public class VirtualBoxService42 implements VirtualBoxService {
         return null;
     }
     
-    public VirtualBoxVolumeInfo[] getAllVolumesInfo() throws IOException {
+    public VirtualBoxVolumeInfo[] getAllVolumesInfo() throws VirtualBoxException {
         return this.getAllVolumesInfo(null);
     }
 
-    public VirtualBoxVolumeInfo[] getAllVolumesInfo(String prefix) throws IOException {
+    public VirtualBoxVolumeInfo[] getAllVolumesInfo(String prefix) throws VirtualBoxException {
 
         ArrayList<VirtualBoxVolumeInfo> result = new ArrayList<VirtualBoxVolumeInfo>();
 
-        for(IMedium v : this.virtualBoxManager.getVBox().getHardDisks()){
+        VirtualBoxManager manager = this.getVirtualBoxManager();
+        
+        for(IMedium v : manager.getVBox().getHardDisks()){
             
             VirtualBoxVolumeInfo info = new VirtualBoxVolumeInfo();
             info.setGuid(v.getId());
@@ -444,7 +476,7 @@ public class VirtualBoxService42 implements VirtualBoxService {
         return result.toArray(new VirtualBoxVolumeInfo[0]);
     }
 
-    public VirtualBoxVolumeInfo getVolumeInfo(String name) throws IOException {
+    public VirtualBoxVolumeInfo getVolumeInfo(String name) throws VirtualBoxException {
         for (VirtualBoxVolumeInfo info : getAllVolumesInfo()) {
             if (info.getName().equals(name)) {
                 return info;
@@ -457,6 +489,8 @@ public class VirtualBoxService42 implements VirtualBoxService {
     public VirtualBoxVolumeInfo createVolume(String prefix, String path, int size, String hardDiskType, long endTime) throws TimeoutException, VirtualBoxException {
         
         storageMutex.lock();
+        
+        VirtualBoxManager manager = this.getVirtualBoxManager();
         
         try{
             int lastId = -1;
@@ -471,8 +505,8 @@ public class VirtualBoxService42 implements VirtualBoxService {
                 }
             } catch (NumberFormatException e) {
                 throw new VirtualBoxException("Unable to list exiting volumes", e);
-            } catch (IOException e) {
-                throw new VirtualBoxException("Unable to list exiting volumes", e);
+            } catch (VirtualBoxException e) {
+                throw e;
             }
             
             String name = prefix+(lastId+1);
@@ -482,7 +516,7 @@ public class VirtualBoxService42 implements VirtualBoxService {
                 fullPath = new File(path, name).getAbsolutePath();
             }
             
-            IMedium medium = this.virtualBoxManager.getVBox().createHardDisk(hardDiskType, fullPath);
+            IMedium medium = manager.getVBox().createHardDisk(hardDiskType, fullPath);
             Long sizeInBytes = size * 1024l * 1024l * 1024l;
             IProgress progress = medium.createBaseStorage(sizeInBytes, (long)org.virtualbox_4_2.MediumVariant.Standard.value());
             
@@ -511,16 +545,18 @@ public class VirtualBoxService42 implements VirtualBoxService {
     
     public void attachVolume(String machineGuid, String volumeName, int controllerPort, long endTime) throws Exception {
         
+        VirtualBoxManager manager = this.getVirtualBoxManager();
+        
         IMedium medium = null;
-        for(IMedium m : virtualBoxManager.getVBox().getHardDisks()){
+        for(IMedium m : manager.getVBox().getHardDisks()){
             if(m.getName().equals(volumeName)){
                 medium = m;
                 break;
             }
         }
         
-        IMachine m = virtualBoxManager.getVBox().findMachine(machineGuid);
-        ISession session = virtualBoxManager.openMachineSession(m);
+        IMachine m = manager.getVBox().findMachine(machineGuid);
+        ISession session = manager.openMachineSession(m);
         m = session.getMachine();
         
         try {
@@ -528,13 +564,14 @@ public class VirtualBoxService42 implements VirtualBoxService {
             
             m.saveSettings();
         } finally{
-            this.virtualBoxManager.closeMachineSession(session);
+            session.unlockMachine();
         }
     }
     
     public void detachVolume(String machineGuid, String volumeName, long endTime) throws Exception {
+        VirtualBoxManager manager = this.getVirtualBoxManager();
         
-        IMachine m = virtualBoxManager.getVBox().findMachine(machineGuid);
+        IMachine m = manager.getVBox().findMachine(machineGuid);
         
         int controllerPort = -1;
         for(IMediumAttachment mediumAttachment : m.getMediumAttachmentsOfController(defaultController)){
@@ -548,7 +585,7 @@ public class VirtualBoxService42 implements VirtualBoxService {
             throw new VirtualBoxException("Volume "+volumeName+" not attached to VM "+m.getId());
         }
         
-        ISession session = virtualBoxManager.openMachineSession(m);
+        ISession session = manager.openMachineSession(m);
         m = session.getMachine();
         
         try {
@@ -556,12 +593,15 @@ public class VirtualBoxService42 implements VirtualBoxService {
             
             m.saveSettings();
         } finally{
-            this.virtualBoxManager.closeMachineSession(session);
+            session.unlockMachine();
         }
     }
     
-    public VirtualBoxVolumeInfo[] getVolumeInfoByMachine(String machineName){
-        IMachine m = virtualBoxManager.getVBox().findMachine(machineName);
+    public VirtualBoxVolumeInfo[] getVolumeInfoByMachine(String machineName) throws VirtualBoxException{
+        
+        VirtualBoxManager manager = this.getVirtualBoxManager();
+        
+        IMachine m = manager.getVBox().findMachine(machineName);
         
         ArrayList<VirtualBoxVolumeInfo> result = new ArrayList<VirtualBoxVolumeInfo>();
         
@@ -581,7 +621,9 @@ public class VirtualBoxService42 implements VirtualBoxService {
     public void deleteVolume(String volumeId, long endTime) throws VirtualBoxException, TimeoutException{
         IMedium medium = null;
         
-        for(IMedium m : this.virtualBoxManager.getVBox().getHardDisks()){
+        VirtualBoxManager manager = this.getVirtualBoxManager();
+        
+        for(IMedium m : manager.getVBox().getHardDisks()){
             if(m.getId().equals(volumeId)){
                 medium = m;
                 break;

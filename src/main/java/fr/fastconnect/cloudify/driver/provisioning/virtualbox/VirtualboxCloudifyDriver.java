@@ -57,13 +57,19 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
     private VirtualBoxService virtualBoxService = new VirtualBoxService42();
 
     private void checkHostOnlyInterface() throws Exception {
+        checkHostOnlyInterface(false);
+    }
+    
+    private void checkHostOnlyInterface(boolean force) throws Exception {
 
+        if((this.hostonlyifIP == null) || force){
+            // connect using the default URL
+            this.virtualBoxService.connect(this.virtualBoxUrl, this.cloud.getUser().getUser(), this.cloud.getUser().getApiKey());            
+        }
+        
         if (this.hostonlyifIP != null) {
             return;
         }
-
-        // connect using the default URL
-        this.virtualBoxService.connect(this.virtualBoxUrl, this.cloud.getUser().getUser(), this.cloud.getUser().getApiKey());
 
         // get the HostOnly Interface
         VirtualBoxHostOnlyInterface hostonlyif = this.virtualBoxService.getHostOnlyInterface(this.hostonlyifName);
@@ -140,7 +146,7 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
         final long endTime = System.currentTimeMillis() + unit.toMillis(duration);
 
         try {
-            checkHostOnlyInterface();
+            checkHostOnlyInterface(true);
         } catch (Exception ex) {
             logger.log(Level.SEVERE, "Unable to create host interface", ex);
             throw new CloudProvisioningException("Unable to create host interface", ex);
