@@ -1,19 +1,20 @@
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>fr.fastconnect</groupId>
 	<artifactId>virtualbox-cloudify-driver</artifactId>
 	<version>1.10-SNAPSHOT</version>
-	
+
 	<scm>
 		<connection>scm:git:git@github.com:fastconnect/virtualbox-cloudify-driver.git</connection>
 	</scm>
-	
+
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<cloudifyVersion>2.5.0-RELEASE</cloudifyVersion>
 		<openspacesVersion>9.1.1-RELEASE</openspacesVersion>
 	</properties>
-	
+
 	<repositories>
 		<repository>
 			<id>org.cloudifysource</id>
@@ -31,7 +32,7 @@
 			<url>https://fastconnect.org/maven/content/repositories/opensource-snapshot</url>
 		</snapshotRepository>
 	</distributionManagement>
-	
+
 	<dependencies>
 		<dependency>
 			<groupId>org.cloudifysource</groupId>
@@ -52,9 +53,9 @@
 			<scope>provided</scope>
 		</dependency>
 		<dependency>
-		    <groupId>org.virtualbox</groupId>
-		    <artifactId>vboxjws</artifactId>
-		    <version>4.2.8</version>
+			<groupId>org.virtualbox</groupId>
+			<artifactId>vboxjws</artifactId>
+			<version>4.2.8</version>
 		</dependency>
 		<dependency>
 			<groupId>commons-codec</groupId>
