@@ -28,7 +28,7 @@ cloud {
         // Mandatory. The HTTP/S URL where cloudify can be downloaded from by newly started machines.
         //cloudifyUrl "gigaspaces-cloudify-2.5.0-ga-b4010.zip"
         //cloudifyOverridesUrl "gigaspaces_overrides.zip"
-        
+
         // Mandatory. The prefix for new machines started for servies.
         machineNamePrefix "app-agent-"
         // Optional. Defaults to true. Specifies whether cloudify should try to deploy services on the management machine.
@@ -70,7 +70,7 @@ cloud {
 
     cloudStorage {
         templates ([
-                
+
             SMALL_BLOCK : storageTemplate{
                 deleteOnExit true
                 size 1
@@ -96,9 +96,12 @@ cloud {
                 remoteDirectory "/home/vagrant/gs-files"
                 localDirectory "upload"
                 // enable sudo.
-                privileged true 
+                privileged true
                 options ([:])
                 overrides ([:])
+                custom ([
+                    "vbox.storageControllerName" : "SATA Controller", // Optional (default: "SATA Controller")
+                ])
             }
         ])
     }
@@ -106,12 +109,16 @@ cloud {
     /*****************
      * Optional. Custom properties used to extend existing drivers or create new ones. 
      */
-    custom ([ 
+    custom ([
         "vbox.boxes.path" : BOXES_PATH,
         "vbox.hostonlyinterface" : HOST_ONLY_INTERFACE,
         "vbox.serverUrl" : SERVER_URL,
-        "vbox.headless" : "true", // optional
-        "vbox.sharedFolder" : SHARED_FOLDER // Optional
+        "vbox.headless" : "true", // Optional
+        "vbox.sharedFolder" : SHARED_FOLDER, // Optional
+        "vbox.privateInterfaceName" : PRIVATE_IF_NAME, // Optional (default: "eth0". On windows VM the name should be set to "Local Area Connection")
+        "vbox.publicInterfaceName" : PUBLIC_IF_NAME, // Optional (default: "eth1". On windows VM the name should be set to "Local Area Connection 2")
+        "vbox.storageControllerName" : STORAGE_CONTROLLER_NAME, // Optional (default: "SATA Controller")
+        "vbox.destroyManagementMachineOnError" : DESTROY_ON_ERROR // Optional (default: "true")
     ])
 }
 

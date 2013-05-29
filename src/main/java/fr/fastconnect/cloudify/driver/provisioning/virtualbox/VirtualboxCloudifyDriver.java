@@ -12,6 +12,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Level;
 
+import org.apache.commons.lang.BooleanUtils;
 import org.apache.commons.lang.StringUtils;
 import org.cloudifysource.dsl.cloud.Cloud;
 import org.cloudifysource.esc.driver.provisioning.CloudDriverSupport;
@@ -25,18 +26,23 @@ import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.VirtualBoxMach
 import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.VirtualBoxService;
 import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.VirtualBoxService42;
 
-public class VirtualboxCloudifyDriver extends CloudDriverSupport implements ProvisioningDriver
-{
+public class VirtualboxCloudifyDriver extends CloudDriverSupport implements ProvisioningDriver {
+
     private static final java.util.logging.Logger logger = java.util.logging.Logger
             .getLogger(VirtualboxCloudifyDriver.class.getName());
 
     private static final String VBOX_BOXES_PATH = "vbox.boxes.path";
+    private static final String VBOX_STORAGE_CONTROLLER_NAME = "vbox.storageControllerName";
     private static final String VBOX_HOSTONLYIF = "vbox.hostonlyinterface";
     private static final String VBOX_HEADLESS = "vbox.headless";
     private static final String VBOX_URL = "vbox.serverUrl";
     private static final String VBOX_SHARED_FOLDER = "vbox.sharedFolder";
+    private static final String VBOX_PRIVATE_INTERFACE_NAME = "vbox.privateInterfaceName";
+    private static final String VBOX_PUBLIC_INTERFACE_NAME = "vbox.publicInterfaceName";
+    private static final String VBOX_DESTROY_MANAGEMENT_MACHINE_ON_ERROR = "vbox.destroyManagementMachineOnError";
+
     private static final int DEFAULT_SHUTDOWN_TIMEOUT_MILLIS = 5 * 60 * 1000; // 5 minutes
-    
+
     private static final ReentrantLock mutex = new ReentrantLock();
 
     private String boxesPath;
@@ -47,26 +53,29 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
     private String hostonlyifMask;
     private String hostonlyifName;
     private String hostSharedFolder;
-    
+    private String privIfName;
+    private String pubIfName;
+    private boolean destroyManagementMachineOnError;
+
     private boolean headless;
 
     private String hostsFile;
-    
+
     private String serverNamePrefix;
-    
+
     private VirtualBoxService virtualBoxService = new VirtualBoxService42();
 
     private void checkHostOnlyInterface() throws Exception {
         checkHostOnlyInterface(false);
     }
-    
+
     private void checkHostOnlyInterface(boolean force) throws Exception {
 
-        if((this.hostonlyifIP == null) || force){
+        if ((this.hostonlyifIP == null) || force) {
             // connect using the default URL
-            this.virtualBoxService.connect(this.virtualBoxUrl, this.cloud.getUser().getUser(), this.cloud.getUser().getApiKey());            
+            this.virtualBoxService.connect(this.virtualBoxUrl, this.cloud.getUser().getUser(), this.cloud.getUser().getApiKey());
         }
-        
+
         if (this.hostonlyifIP != null) {
             return;
         }
@@ -83,14 +92,12 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
         this.baseIP = this.hostonlyifIP.substring(0, this.hostonlyifIP.lastIndexOf('.'));
 
         // generate a hosts file with fixed IP
-        hostsFile = "127.0.0.1  localhost\n";
-
+        hostsFile = "\r\n127.0.0.1\tlocalhost\r\n";
         for (int cpt = 2; cpt < 10; cpt++) {
-            hostsFile += this.baseIP + "." + cpt + "\t" + this.cloud.getProvider().getManagementGroup() + (cpt - 1) + "\n";
+            hostsFile += this.baseIP + "." + cpt + "\t" + this.cloud.getProvider().getManagementGroup() + (cpt - 1) + "\r\n";
         }
-
         for (int cpt = 10; cpt < 30; cpt++) {
-            hostsFile += this.baseIP + "." + cpt + "\t" + this.cloud.getProvider().getMachineNamePrefix() + (cpt - 9) + "\n";
+            hostsFile += this.baseIP + "." + cpt + "\t" + this.cloud.getProvider().getMachineNamePrefix() + (cpt - 9) + "\r\n";
         }
     }
 
@@ -102,9 +109,13 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
     }
 
     @Override
-    public void setConfig(Cloud cloud, String cloudTemplate, boolean management, String serviceName, 
+    public void setConfig(Cloud cloud, String cloudTemplate, boolean management, String serviceName,
             boolean performValidation) {
         super.setConfig(cloud, cloudTemplate, management, serviceName, performValidation);
+
+        if (this.template.getUsername() == null) {
+            logger.log(Level.WARNING, "Username is not set in the template " + cloudTemplate);
+        }
 
         if (this.management) {
             this.serverNamePrefix = this.cloud.getProvider().getManagementGroup();
@@ -130,19 +141,24 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
         this.hostSharedFolder = (String) this.cloud.getCustom().get(VBOX_SHARED_FOLDER);
 
         String headlessString = (String) this.cloud.getCustom().get(VBOX_HEADLESS);
-        if (headlessString == null) {
-            this.headless = true;
-        }
-        else {
-            this.headless = Boolean.parseBoolean(headlessString);
-        }
+        this.headless = headlessString == null ? true : BooleanUtils.toBoolean(headlessString);
+
+        this.privIfName = StringUtils.defaultIfEmpty((String) this.cloud.getCustom().get(VBOX_PRIVATE_INTERFACE_NAME), "eth0");
+        this.pubIfName = StringUtils.defaultIfEmpty((String) this.cloud.getCustom().get(VBOX_PUBLIC_INTERFACE_NAME), "eth1");
+        String destroyString = (String) this.cloud.getCustom().get(VBOX_DESTROY_MANAGEMENT_MACHINE_ON_ERROR);
+        this.destroyManagementMachineOnError = destroyString == null ? true : BooleanUtils.toBoolean(destroyString);
+
+        String storageControllerName = StringUtils.defaultIfEmpty((String) this.cloud.getCustom().get(VBOX_STORAGE_CONTROLLER_NAME), "SATA Controller");
+        storageControllerName = StringUtils.defaultIfEmpty((String) this.template.getCustom().get(VBOX_STORAGE_CONTROLLER_NAME), storageControllerName);
+        virtualBoxService.setStorageControllerName(storageControllerName);
+        logger.log(Level.INFO, "[VBOX] Storage Controller Name = " + storageControllerName);
     }
 
     public MachineDetails startMachine(String locationId, long duration, TimeUnit unit)
             throws TimeoutException, CloudProvisioningException {
 
         logger.info("Start VBox machine");
-        
+
         final long endTime = System.currentTimeMillis() + unit.toMillis(duration);
 
         try {
@@ -213,7 +229,7 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
             } finally {
                 mutex.unlock();
             }
-            
+
             this.virtualBoxService.start(
                     vboxInfo.getMachineName(),
                     this.template.getUsername(),
@@ -227,22 +243,30 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
                     this.template.getPassword(),
                     this.hostsFile,
                     endTime);
-            
+
             this.virtualBoxService.updateNetworkingInterfaces(
                     vboxInfo.getMachineName(),
                     this.template.getUsername(),
                     this.template.getPassword(),
+                    this.privIfName,
+                    this.pubIfName,
                     addressIP,
                     this.hostonlyifMask,
                     this.hostonlyifIP,
                     endTime);
-            
+
             this.virtualBoxService.grantAccessToSharedFolder(
                     vboxInfo.getMachineName(),
                     this.template.getUsername(),
                     this.template.getPassword(),
                     endTime);
-            
+
+            this.virtualBoxService.runCommandsBeforeBootstrap(
+                    vboxInfo.getMachineName(),
+                    this.template.getUsername(),
+                    this.template.getPassword(),
+                    endTime);
+
             md = new MachineDetails();
             md.setMachineId(vboxInfo.getGuid());
             md.setAgentRunning(false);
@@ -253,6 +277,7 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
             md.setRemotePassword(this.template.getPassword());
             md.setRemoteExecutionMode(this.template.getRemoteExecution());
             md.setFileTransferMode(this.template.getFileTransfer());
+            md.setScriptLangeuage(this.template.getScriptLanguage());
             md.setPrivateAddress(addressIP);
             md.setPublicAddress(addressIP);
 
@@ -289,7 +314,7 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
             ExecutorService executor) throws CloudProvisioningException {
 
         final long endTime = System.currentTimeMillis() + timeout.toMillis(duration);
-        
+
         // launch machine on a thread
         final List<Future<MachineDetails>> list = new ArrayList<Future<MachineDetails>>(numOfManagementMachines);
         for (int i = 0; i < numOfManagementMachines; i++) {
@@ -322,23 +347,25 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
             return machines.toArray(new MachineDetails[machines.size()]);
         } else {
             // in case of an exception, clear the machines
-            logger.warning("Provisioning of management machines failed, the following node will be shut down: "
-                    + machines);
-            for (final MachineDetails machineDetails : machines) {
-                try {
-                    // TODO : do it in a thread to detect TIMEOUT
-                    this.virtualBoxService.stop(machineDetails.getMachineId(), endTime);
-                    this.virtualBoxService.destroy(machineDetails.getMachineId(), endTime);
-                } catch (final Exception e) {
-                    logger.log(Level.SEVERE,
-                            "While shutting down machine after provisioning of management machines failed, "
-                                    + "shutdown of node: " + machineDetails.getMachineId()
-                                    + " failed. This machine may be leaking. Error was: " + e.getMessage(), e);
+            logger.warning("Provisioning of management machines failed, the following node will be shut down: " + machines);
+
+            if (this.destroyManagementMachineOnError) {
+                for (final MachineDetails machineDetails : machines) {
+                    try {
+                        // TODO : do it in a thread to detect TIMEOUT
+                        this.virtualBoxService.stop(machineDetails.getMachineId(), endTime);
+                        this.virtualBoxService.destroy(machineDetails.getMachineId(), endTime);
+                    } catch (final Exception e) {
+                        logger.log(
+                                Level.SEVERE,
+                                "While shutting down machine after provisioning of management machines failed, "
+                                        + "shutdown of node: " + machineDetails.getMachineId()
+                                        + " failed. This machine may be leaking. Error was: " + e.getMessage(), e);
+                    }
                 }
             }
 
-            throw new CloudProvisioningException(
-                    "Failed to launch management machines: " + firstException.getMessage(), firstException);
+            throw new CloudProvisioningException("Failed to launch management machines: " + firstException.getMessage(), firstException);
         }
     }
 
@@ -347,7 +374,7 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
             CloudProvisioningException {
 
         final long endTime = System.currentTimeMillis() + timeout.toMillis(duration);
-        
+
         logger.info("Stop VBox machine");
 
         try {
@@ -367,17 +394,22 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
             else {
                 lastIP = lastIP - 9;
             }
-            
+
             String machineName = this.serverNamePrefix + lastIP;
 
-            logger.log(Level.INFO, "Stoping machine "+machineName);
+            logger.log(Level.INFO, "Stoping machine " + machineName);
             VirtualBoxMachineInfo info = this.virtualBoxService.getInfo(machineName);
-            this.virtualBoxService.stop(info.getGuid(), endTime);
+            try {
+                this.virtualBoxService.stop(info.getGuid(), endTime);
+            } catch (Exception e) {
+                logger.log(Level.WARNING,
+                        String.format("Couldn't stop the machine (%s,%s) properly, but it will be killed.", info.getMachineName(), info.getGuid()), e);
+            }
             this.virtualBoxService.destroy(info.getGuid(), endTime);
 
             return true;
         } catch (Exception ex) {
-            logger.log(Level.SEVERE, "Unable to stop machine "+machineIp, ex);
+            logger.log(Level.SEVERE, "Unable to stop machine " + machineIp, ex);
             return false;
         }
     }
@@ -386,13 +418,18 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
             CloudProvisioningException {
 
         final long endTime = System.currentTimeMillis() + DEFAULT_SHUTDOWN_TIMEOUT_MILLIS;
-        
+
         try {
             checkHostOnlyInterface();
 
             for (int cpt = 1; cpt <= this.cloud.getProvider().getNumberOfManagementMachines(); cpt++) {
                 VirtualBoxMachineInfo info = this.virtualBoxService.getInfo(this.serverNamePrefix + cpt);
-                this.virtualBoxService.stop(info.getGuid(), endTime);
+                try {
+                    this.virtualBoxService.stop(info.getGuid(), endTime);
+                } catch (Exception e) {
+                    logger.log(Level.WARNING,
+                            String.format("Couldn't stop the machine (%s,%s) properly, but it will be killed.", info.getMachineName(), info.getGuid()), e);
+                }
                 this.virtualBoxService.destroy(info.getGuid(), endTime);
             }
         } catch (final Exception e) {

@@ -7,40 +7,41 @@ public class UbuntuGuest extends LinuxGuest {
     public UbuntuGuest(VirtualBoxManager virtualBoxManager) {
         super(virtualBoxManager);
     }
-    
+
     public void updateHostname(String machineGuid, String login, String password, String hostname, long endTime) throws Exception {
-     
+
         // create a script to update the hostname
-        String updatehostnameContent = "#!/bin/bash\n"+
+        String updatehostnameContent = "#!/bin/bash\n" +
                 "sudo sed -i s/.*$/" + hostname + "/ /etc/hostname\n" +
                 "sudo service hostname start";
-        
+
         executeScript(machineGuid, login, password, "updatehostname.sh", updatehostnameContent, endTime);
     }
-    
-    public void updateNetworkingInterfaces(String machineGuid, String login, String password, String ip, String mask, String gatewayIp, String eth0Mac, String eth1Mac, long endTime) throws Exception {
-        
+
+    public void updateNetworkingInterfaces(String machineGuid, String login, String password, String privIfName, String pubIfName, String ip, String mask,
+            String gatewayIp, long endTime) throws Exception {
+
         // create the new /etc/network/interfaces file, and copy to guest
-        String interfacesContent = "auto lo\n"+
-                "iface lo inet loopback\n\n"+
-                "auto eth0\n"+
-                "iface eth0 inet dhcp\n"+
-                "\n"+
-                "auto eth1\n"+
-                "iface eth1 inet static\n"+
-                "address "+ip+"\n"+
-                "netmask "+mask+"\n"+
-                "gateway "+gatewayIp+"\n";
-        
+        String interfacesContent = "auto lo\n" +
+                "iface lo inet loopback\n\n" +
+                "auto eth0\n" +
+                "iface eth0 inet dhcp\n" +
+                "\n" +
+                "auto eth1\n" +
+                "iface eth1 inet static\n" +
+                "address " + ip + "\n" +
+                "netmask " + mask + "\n" +
+                "gateway " + gatewayIp + "\n";
+
         createFile(machineGuid, login, password, "/tmp/interfaces", interfacesContent, endTime);
-        
-        // create the script to update the interfaces file, and copy it to the guest        
-        String updateinterfacesContent = "#!/bin/bash\n"+
-                "cat /tmp/interfaces | sudo tee /etc/network/interfaces\n"+
-                "sudo rm /etc/udev/rules.d/70-persistent-net.rules\n"+
-                "sudo udevadm trigger\n"+
-                "sudo /etc/init.d/networking restart";  
-        
+
+        // create the script to update the interfaces file, and copy it to the guest
+        String updateinterfacesContent = "#!/bin/bash\n" +
+                "cat /tmp/interfaces | sudo tee /etc/network/interfaces\n" +
+                "sudo rm /etc/udev/rules.d/70-persistent-net.rules\n" +
+                "sudo udevadm trigger\n" +
+                "sudo /etc/init.d/networking restart";
+
         executeScript(machineGuid, login, password, "updateinterfaces.sh", updateinterfacesContent, endTime);
     }
 }

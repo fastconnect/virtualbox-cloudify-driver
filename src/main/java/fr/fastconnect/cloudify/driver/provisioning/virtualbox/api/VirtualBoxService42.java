@@ -1,17 +1,13 @@
 package fr.fastconnect.cloudify.driver.provisioning.virtualbox.api;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Level;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
-import org.apache.commons.lang.StringUtils;
 import org.virtualbox_4_2.CleanupMode;
 import org.virtualbox_4_2.DeviceType;
 import org.virtualbox_4_2.Holder;
@@ -27,8 +23,6 @@ import org.virtualbox_4_2.ISession;
 import org.virtualbox_4_2.IStorageController;
 import org.virtualbox_4_2.IVirtualSystemDescription;
 import org.virtualbox_4_2.ImportOptions;
-import org.virtualbox_4_2.LockType;
-import org.virtualbox_4_2.MachineState;
 import org.virtualbox_4_2.NetworkAttachmentType;
 import org.virtualbox_4_2.VBoxException;
 import org.virtualbox_4_2.VirtualBoxManager;
@@ -42,29 +36,23 @@ import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.guest.VirtualB
 
 public class VirtualBoxService42 implements VirtualBoxService {
 
+    private static final java.util.logging.Logger logger = java.util.logging.Logger.getLogger(VirtualBoxService42.class.getName());
+
     private static final int SERVER_POLLING_INTERVAL_MILLIS = 10 * 1000; // 10 seconds
+    private static final String CLOUDIFY_SHARED_FOLDER = "cloudify";
+    private static final String DEFAULT_CONTROLLER = "SATA Controller";
 
-    private static final java.util.logging.Logger logger = java.util.logging.Logger
-            .getLogger(VirtualBoxService42.class.getName());
-
-    private static final String cloudify_shared_folder = "cloudify";
-
-    private static final String defaultController = "SATA Controller";
-
-    private VirtualBoxManager virtualBoxManager;
-
-    private VirtualBoxGuestProvider virtualBoxGuestProvider;
-
+    private static final ReentrantLock COMPUTE_MUTEX = new ReentrantLock();
+    private static final ReentrantLock STORAGE_MUTEX = new ReentrantLock();
     private final ReentrantLock virtualboxManagerLock = new ReentrantLock();
 
-    private static final ReentrantLock computeMutex = new ReentrantLock();
+    private String storageControllerName = DEFAULT_CONTROLLER;
 
-    private static final ReentrantLock storageMutex = new ReentrantLock();
+    private VirtualBoxManager virtualBoxManager;
+    private VirtualBoxGuestProvider virtualBoxGuestProvider;
 
     private String lastUrl;
-
     private String lastLogin;
-
     private String lastPassword;
 
     protected VirtualBoxManager getVirtualBoxManager() throws VirtualBoxException {
@@ -240,7 +228,7 @@ public class VirtualBoxService42 implements VirtualBoxService {
         result.setGuid(machine.getId());
         result.setMachineName(vmname);
 
-        computeMutex.lock();
+        COMPUTE_MUTEX.lock();
         try {
             ISession session = manager.openMachineSession(machine);
             machine = session.getMachine();
@@ -261,10 +249,10 @@ public class VirtualBoxService42 implements VirtualBoxService {
                 nic2.setEnabled(true);
 
                 if (hostSharedFolder != null && hostSharedFolder.length() > 0) {
-                    machine.createSharedFolder(cloudify_shared_folder, hostSharedFolder, true, true);
+                    machine.createSharedFolder(CLOUDIFY_SHARED_FOLDER, hostSharedFolder, true, true);
                 }
 
-                IStorageController storageController = machine.getStorageControllerByName(defaultController);
+                IStorageController storageController = machine.getStorageControllerByName(storageControllerName);
                 storageController.setPortCount(storageController.getMaxPortCount());
 
                 machine.saveSettings();
@@ -272,7 +260,7 @@ public class VirtualBoxService42 implements VirtualBoxService {
                 session.unlockMachine();
             }
         } finally {
-            computeMutex.unlock();
+            COMPUTE_MUTEX.unlock();
         }
 
         return result;
@@ -285,7 +273,7 @@ public class VirtualBoxService42 implements VirtualBoxService {
 
         IMachine m = manager.getVBox().findMachine(machineGuid);
 
-        computeMutex.lock();
+        COMPUTE_MUTEX.lock();
 
         try {
 
@@ -302,7 +290,7 @@ public class VirtualBoxService42 implements VirtualBoxService {
                 throw new VirtualBoxException("Unable to delete VM: " + progress.getErrorInfo().getText());
             }
         } finally {
-            computeMutex.unlock();
+            COMPUTE_MUTEX.unlock();
         }
     }
 
@@ -323,12 +311,11 @@ public class VirtualBoxService42 implements VirtualBoxService {
         IMachine machine = manager.getVBox().findMachine(machineGuid);
         VirtualBoxGuest guest = this.virtualBoxGuestProvider.getVirtualBoxGuest(machine.getOSTypeId());
 
-        // wait for the guest OS to be ready
+        // Wait for the guest OS to be ready
         boolean isReady = false;
         while (!isReady && System.currentTimeMillis() < endTime) {
             try {
                 guest.ping(machineGuid, login, password, endTime);
-
                 isReady = true;
             } catch (Exception ex) {
                 logger.log(Level.FINE, "OS not ready yet", ex);
@@ -343,40 +330,36 @@ public class VirtualBoxService42 implements VirtualBoxService {
 
         // machine.getGuestPropertyValue("/VirtualBox/GuestInfo/Net/0/V4/IP")
 
-        // create a script to update the hostname
+        // Create a script to update the hostname
         guest.updateHostname(machineGuid, login, password, machine.getName(), endTime);
     }
 
     public void grantAccessToSharedFolder(String machineGuid, String login, String password, long endTime) throws Exception {
 
-        // add the current user to the group vboxsf to read the shared folder
-        String addUserScript = "#!/bin/bash\n" +
-                "sudo usermod -a -G vboxsf $(whoami)";
-
         VirtualBoxManager manager = this.getVirtualBoxManager();
 
         IMachine machine = manager.getVBox().findMachine(machineGuid);
         VirtualBoxGuest guest = this.virtualBoxGuestProvider.getVirtualBoxGuest(machine.getOSTypeId());
-        guest.executeScript(machineGuid, login, password, "adduser.sh", addUserScript, endTime);
+        guest.grantAccessToSharedFolder(machineGuid, login, password, endTime);
     }
 
-    public void updateNetworkingInterfaces(String machineGuid, String login, String password, String ip, String mask, String gateway, long endTime)
+    public void updateNetworkingInterfaces(String machineGuid, String login, String password, String privIfName, String pubIfName,
+            String ip, String mask, String gateway, long endTime)
             throws Exception {
 
         logger.log(Level.INFO, "Trying to update network interfaces on VM '" + machineGuid + "'");
 
         VirtualBoxManager manager = this.getVirtualBoxManager();
-
         IMachine machine = manager.getVBox().findMachine(machineGuid);
-        String eth0Mac = machine.getNetworkAdapter(0l).getMACAddress();
-        eth0Mac = eth0Mac.substring(0, 2) + ":" + eth0Mac.substring(2, 4) + ":" + eth0Mac.substring(4, 6) + ":" + eth0Mac.substring(6, 8) + ":"
-                + eth0Mac.substring(8, 10) + ":" + eth0Mac.substring(10, 12);
-        String eth1Mac = machine.getNetworkAdapter(1l).getMACAddress();
-        eth1Mac = eth1Mac.substring(0, 2) + ":" + eth1Mac.substring(2, 4) + ":" + eth1Mac.substring(4, 6) + ":" + eth1Mac.substring(6, 8) + ":"
-                + eth1Mac.substring(8, 10) + ":" + eth1Mac.substring(10, 12);
-
         VirtualBoxGuest guest = this.virtualBoxGuestProvider.getVirtualBoxGuest(machine.getOSTypeId());
-        guest.updateNetworkingInterfaces(machineGuid, login, password, ip, mask, gateway, eth0Mac, eth1Mac, endTime);
+        guest.updateNetworkingInterfaces(machineGuid, login, password, privIfName, pubIfName, ip, mask, gateway, endTime);
+    }
+
+    public void runCommandsBeforeBootstrap(String machineGuid, String login, String password, long endTime) throws Exception {
+        VirtualBoxManager manager = this.getVirtualBoxManager();
+        IMachine machine = manager.getVBox().findMachine(machineGuid);
+        VirtualBoxGuest guest = this.virtualBoxGuestProvider.getVirtualBoxGuest(machine.getOSTypeId());
+        guest.runCommandsBeforeBootstrap(machineGuid, login, password, endTime);
     }
 
     public void updateHosts(String machineGuid, String login, String password, String hosts, long endTime) throws InterruptedException, Exception {
@@ -398,7 +381,7 @@ public class VirtualBoxService42 implements VirtualBoxService {
 
         IMachine m = manager.getVBox().findMachine(machineGuid);
 
-        computeMutex.lock();
+        COMPUTE_MUTEX.lock();
         try {
 
             ISession session = manager.openMachineSession(m);
@@ -419,10 +402,14 @@ public class VirtualBoxService42 implements VirtualBoxService {
                     throw new VirtualBoxException("Unable to shutdown vm " + machineGuid + ": " + progress.getErrorInfo().getText());
                 }
             } finally {
-                session.unlockMachine();
+                try {
+                    session.unlockMachine();
+                } catch (Exception e) {
+                    logger.log(Level.WARNING, "Could not unlock machine", e);
+                }
             }
         } finally {
-            computeMutex.unlock();
+            COMPUTE_MUTEX.unlock();
         }
     }
 
@@ -486,7 +473,7 @@ public class VirtualBoxService42 implements VirtualBoxService {
     public VirtualBoxVolumeInfo createVolume(String prefix, String path, int size, String hardDiskType, long endTime) throws TimeoutException,
             VirtualBoxException {
 
-        storageMutex.lock();
+        STORAGE_MUTEX.lock();
 
         VirtualBoxManager manager = this.getVirtualBoxManager();
 
@@ -537,7 +524,7 @@ public class VirtualBoxService42 implements VirtualBoxService {
 
             return info;
         } finally {
-            storageMutex.unlock();
+            STORAGE_MUTEX.unlock();
         }
     }
 
@@ -558,7 +545,7 @@ public class VirtualBoxService42 implements VirtualBoxService {
         m = session.getMachine();
 
         try {
-            m.attachDevice(defaultController, controllerPort, 0, DeviceType.HardDisk, medium);
+            m.attachDevice(storageControllerName, controllerPort, 0, DeviceType.HardDisk, medium);
 
             m.saveSettings();
         } finally {
@@ -572,7 +559,7 @@ public class VirtualBoxService42 implements VirtualBoxService {
         IMachine m = manager.getVBox().findMachine(machineGuid);
 
         int controllerPort = -1;
-        for (IMediumAttachment mediumAttachment : m.getMediumAttachmentsOfController(defaultController)) {
+        for (IMediumAttachment mediumAttachment : m.getMediumAttachmentsOfController(storageControllerName)) {
             if (mediumAttachment.getMedium().getName().equals(volumeName)) {
                 controllerPort = mediumAttachment.getPort();
                 break;
@@ -587,7 +574,7 @@ public class VirtualBoxService42 implements VirtualBoxService {
         m = session.getMachine();
 
         try {
-            m.attachDevice(defaultController, controllerPort, 0, DeviceType.HardDisk, null);
+            m.attachDevice(storageControllerName, controllerPort, 0, DeviceType.HardDisk, null);
 
             m.saveSettings();
         } finally {
@@ -603,7 +590,7 @@ public class VirtualBoxService42 implements VirtualBoxService {
 
         ArrayList<VirtualBoxVolumeInfo> result = new ArrayList<VirtualBoxVolumeInfo>();
 
-        for (IMediumAttachment mediumAttachment : m.getMediumAttachmentsOfController(defaultController)) {
+        for (IMediumAttachment mediumAttachment : m.getMediumAttachmentsOfController(storageControllerName)) {
             VirtualBoxVolumeInfo info = new VirtualBoxVolumeInfo();
             info.setGuid(mediumAttachment.getMedium().getId());
             info.setName(mediumAttachment.getMedium().getName());
@@ -644,5 +631,9 @@ public class VirtualBoxService42 implements VirtualBoxService {
         if (progress.getResultCode() != 0) {
             throw new VirtualBoxException("Unable to delete volume " + volumeId + ": " + progress.getErrorInfo().getText());
         }
+    }
+
+    public void setStorageControllerName(String storageControllerName) {
+        this.storageControllerName = storageControllerName;
     }
 }
