@@ -54,7 +54,7 @@ Here is the POM configuration to include the driver:
 	<dependency>
 		<groupId>fr.fastconnect</groupId>
 		<artifactId>virtualbox-cloudify-driver</artifactId>
-		<version>1.10</version>
+		<version>1.11</version>
 		<exclusions>
 			<exclusion>
 				<artifactId>esc</artifactId>
@@ -69,7 +69,7 @@ Here is the POM configuration to include the driver:
 </dependencies>
 ```
 
-Here is the full URL: https://fastconnect.org/maven/content/repositories/opensource/fr/fastconnect/virtualbox-cloudify-driver/1.10/virtualbox-cloudify-driver-1.10.jar
+Here is the full URL: https://fastconnect.org/maven/content/repositories/opensource/fr/fastconnect/virtualbox-cloudify-driver/1.11/virtualbox-cloudify-driver-1.11.jar
 
 
 Copyright and license
