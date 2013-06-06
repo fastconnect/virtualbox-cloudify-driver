@@ -1,10 +1,12 @@
 package fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.guest;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Level;
 
+import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.lang.StringUtils;
 import org.virtualbox_4_2.IConsole;
 import org.virtualbox_4_2.IGuest;
@@ -32,6 +34,41 @@ public abstract class BaseGuest implements VirtualBoxGuest {
         this.virtualBoxManager = virtualBoxManager;
     }
 
+    List<String> createSplittedBase64Content(String content) {
+        byte[] bytes = Base64.encodeBase64((content + "\n").getBytes());
+
+        // openssl has a limit for each line in base64
+        // should be 76 but seems that sometimes it's not working
+        final int maxBase64lenght = 60;
+        String base64 = new String(bytes);
+        int linesNumber = base64.length() / maxBase64lenght;
+        if ((base64.length() % maxBase64lenght) > 0) {
+            linesNumber++;
+        }
+
+        List<String> builder = new ArrayList<String>();
+
+        for (int cpt = 0; cpt < linesNumber; cpt++) {
+            if (cpt == linesNumber - 1) {
+                builder.add(base64.substring(cpt * maxBase64lenght, base64.length()));
+            }
+            else {
+                builder.add(base64.substring(cpt * maxBase64lenght, (cpt + 1) * maxBase64lenght));
+            }
+        }
+        return builder;
+    }
+
+    public long executeCommand(String machineGuid, String login, String password, String command, long endTime)
+            throws Exception {
+        return this.executeCommand(machineGuid, login, password, command, Arrays.asList(new String[0]), Arrays.asList(new String[0]), endTime);
+    }
+
+    public long executeCommand(String machineGuid, String login, String password, String command, List<String> args, long endTime)
+            throws Exception {
+        return this.executeCommand(machineGuid, login, password, command, args, Arrays.asList(new String[0]), endTime);
+    }
+
     public long executeCommand(String machineGuid, String login, String password, String command, List<String> args, List<String> envs, long endTime)
             throws Exception {
 
@@ -48,7 +85,6 @@ public abstract class BaseGuest implements VirtualBoxGuest {
             IGuest guest = console.getGuest();
 
             IGuestSession guestSession = guest.createSession(login, password, "", "");
-
             try {
 
                 long timeLeft = endTime - System.currentTimeMillis();
@@ -65,7 +101,6 @@ public abstract class BaseGuest implements VirtualBoxGuest {
                 }
 
                 // TODO: get the stdout/stderr with this webservice...
-
                 return process.getPID();
             } finally {
                 guestSession.close();
@@ -80,4 +115,5 @@ public abstract class BaseGuest implements VirtualBoxGuest {
         // Do nothing by default
         return;
     }
+
 }

@@ -1,11 +1,9 @@
 package fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.guest;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.logging.Level;
 
-import org.apache.commons.codec.binary.Base64;
 import org.virtualbox_4_2.VirtualBoxManager;
 
 public abstract class LinuxGuest extends BaseGuest {
@@ -19,7 +17,7 @@ public abstract class LinuxGuest extends BaseGuest {
 
     public void ping(String machineGuid, String login, String password, long endTime) throws Exception {
         // do a ls command just to test if it's up
-        this.executeCommand(machineGuid, login, password, "/bin/ls", Arrays.asList(new String[0]), Arrays.asList(new String[0]), endTime);
+        this.executeCommand(machineGuid, login, password, "/bin/ls", Arrays.asList(new String[0]), endTime);
     }
 
     /*
@@ -32,35 +30,13 @@ public abstract class LinuxGuest extends BaseGuest {
 
         logger.log(Level.INFO, "Trying to create file '" + destination + "' on machine '" + machineGuid + "'");
 
-        // TODO: do it in another way with Windows OS
-
         // ultra hack: VirtualBox has a 'fileCreate' function, but not in the WS API
         // it's not possible to use '>' or '|' with "/bin/bash" command
         // and the content of the file could have special chars for bash
         // so the hack is to copy an existing file, change it with sed with a base64 content to avoid special chars
         // and decode it with openssl
 
-        byte[] bytes = Base64.encodeBase64((content + "\n").getBytes());
-
-        // openssl has a limit for each line in base64
-        // should be 76 but seems that sometimes it's not working
-        final int maxBase64lenght = 60;
-        String base64 = new String(bytes);
-        int linesNumber = base64.length() / maxBase64lenght;
-        if ((base64.length() % maxBase64lenght) > 0) {
-            linesNumber++;
-        }
-
-        List<String> builder = new ArrayList<String>();
-
-        for (int cpt = 0; cpt < linesNumber; cpt++) {
-            if (cpt == linesNumber - 1) {
-                builder.add(base64.substring(cpt * maxBase64lenght, base64.length()));
-            }
-            else {
-                builder.add(base64.substring(cpt * maxBase64lenght, (cpt + 1) * maxBase64lenght));
-            }
-        }
+        List<String> builder = this.createSplittedBase64Content(content);
 
         // create an empty file
         this.executeCommand(
@@ -69,12 +45,10 @@ public abstract class LinuxGuest extends BaseGuest {
                 password,
                 "/bin/touch",
                 Arrays.asList(destination + ".base64"),
-                Arrays.asList(new String[0]),
                 endTime);
 
         // replace all chars by the base64
         // because the base64 can be too big, append each lines to the file
-
         for (String line : builder) {
             this.executeCommand(
                     machineGuid,
@@ -82,7 +56,6 @@ public abstract class LinuxGuest extends BaseGuest {
                     password,
                     "/bin/bash",
                     Arrays.asList("-c", "echo '" + line + "' >> " + destination + ".base64"),
-                    Arrays.asList(new String[0]),
                     endTime);
         }
 
@@ -93,7 +66,6 @@ public abstract class LinuxGuest extends BaseGuest {
                 password,
                 "/usr/bin/openssl",
                 Arrays.asList("enc", "-base64", "-d", "-base64", "-in", destination + ".base64", "-out", destination),
-                Arrays.asList(new String[0]),
                 endTime);
 
         // remove the base64 file
@@ -125,7 +97,6 @@ public abstract class LinuxGuest extends BaseGuest {
                 password,
                 "/bin/chmod",
                 Arrays.asList("a+x", "/tmp/" + filename),
-                Arrays.asList(new String[0]),
                 endTime);
 
         this.executeCommand(
@@ -133,7 +104,6 @@ public abstract class LinuxGuest extends BaseGuest {
                 login,
                 password,
                 "/tmp/" + filename,
-                Arrays.asList(new String[0]),
                 Arrays.asList(new String[0]),
                 endTime);
     }

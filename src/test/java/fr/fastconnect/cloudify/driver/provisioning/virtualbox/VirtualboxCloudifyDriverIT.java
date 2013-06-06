@@ -74,7 +74,7 @@ public class VirtualboxCloudifyDriverIT {
         template.setMachineMemoryMB(1024);
         template.setUsername("vagrant");
         template.setPassword("vagrant");
-        template.setImageId("precise64-cloudify-win2k8r2-mod");
+        template.setImageId("win2008r2-sqlserver");
         template.setMachineMemoryMB(1024);
         template.setHardwareId("hardwareId");
         template.setRemoteDirectory("/C\\$/Users/Administrator/gs-files");

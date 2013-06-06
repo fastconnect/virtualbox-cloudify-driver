@@ -1,19 +1,11 @@
 package fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.guest;
 
 import java.io.File;
-import java.io.FileOutputStream;
 import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.TimeoutException;
 import java.util.logging.Level;
 
-import org.virtualbox_4_2.CopyFileFlag;
-import org.virtualbox_4_2.DirectoryCreateFlag;
-import org.virtualbox_4_2.IConsole;
-import org.virtualbox_4_2.IGuest;
-import org.virtualbox_4_2.IGuestSession;
-import org.virtualbox_4_2.IMachine;
-import org.virtualbox_4_2.IProgress;
-import org.virtualbox_4_2.ISession;
 import org.virtualbox_4_2.VirtualBoxManager;
 
 public class WindowsGuest extends BaseGuest {
@@ -51,8 +43,7 @@ public class WindowsGuest extends BaseGuest {
                 String.format("netsh interface ip set address \"%s\" static %s %s %s >> %supdateNetwork2.log", pubIfName, ip, mask, gatewayIp,
                         GUEST_DESTINATION_SCRIPT_FOLDER), endTime);
 
-        this.executeCommand(machineGuid, login, password, WINDOWS_SCRIPT_FOLDER + "ipconfig.exe", Arrays.asList("/renew"), Arrays.asList(new String[0]),
-                endTime);
+        this.executeCommand(machineGuid, login, password, WINDOWS_SCRIPT_FOLDER + "ipconfig.exe", Arrays.asList("/renew"), endTime);
     }
 
     public void updateHosts(String machineGuid, String login, String password, String hosts, long endTime) throws Exception {
@@ -60,68 +51,56 @@ public class WindowsGuest extends BaseGuest {
 
         // /!\ The windows 'type' command is tricky. /!\
         // If you want to do a 'type' on a file in a different folder, you have to use '\' in your path i.e : 'C:\my_folder\my_file.txt'
-        // ('C:/my_folder/my_file.txt' is not valid).
+        // ('type C:/my_folder/my_file.txt' won't work).
         String script = String.format("type \"%shosts\" >> C:/Windows/System32/drivers/etc/hosts", GUEST_DESTINATION_SCRIPT_FOLDER.replaceAll("/", "\\\\"));
         this.executeScript(machineGuid, login, password, "updateHosts.bat", script, endTime);
     }
 
     public void executeScript(String machineGuid, String login, String password, String filename, String content, long endTime) throws Exception {
         // Create and copy a file which will contains the script context on the Guest machine.
-        String destination = GUEST_DESTINATION_SCRIPT_FOLDER + filename;
-        this.createFile(machineGuid, login, password, destination, content, endTime);
-
+        String destinationScript = GUEST_DESTINATION_SCRIPT_FOLDER + filename;
+        this.createFile(machineGuid, login, password, destinationScript, content, endTime);
         // Execute script.
-        logger.log(Level.INFO, "Trying to execute file '" + destination + "' on VM '" + machineGuid + "'");
-        this.executeCommand(machineGuid, login, password, destination, Arrays.asList(new String[0]), Arrays.asList(new String[0]), endTime);
+        logger.log(Level.INFO, "Trying to execute file '" + destinationScript + "' on VM '" + machineGuid + "'");
+        this.executeCommand(machineGuid, login, password, destinationScript, endTime);
     }
 
     public void createFile(String machineGuid, String login, String password, String destination, String content, long endTime) throws Exception {
-        File sourceFile = File.createTempFile("vboxScript", ".bat");
-        FileOutputStream fos = new FileOutputStream(sourceFile);
-        fos.write(content.getBytes());
-        fos.close();
+        logger.log(Level.INFO, "Trying to create file '" + destination + "' on machine '" + machineGuid + "'");
 
-        IMachine m = virtualBoxManager.getVBox().findMachine(machineGuid);
-        ISession session = virtualBoxManager.openMachineSession(m);
-        IGuestSession guestSession = null;
-        try {
-            m = session.getMachine();
-            IConsole console = session.getConsole();
-            IGuest guest = console.getGuest();
-            guestSession = guest.createSession(login, password, "", "");
+        // Create parent folder
+        this.executeCommand(machineGuid, login, password, "C:\\windows\\system32\\cmd.exe",
+                Arrays.asList(new String[] { "/c", "md", new File(destination).getParent() }),
+                endTime);
 
-            if (!this.directoryExists(guestSession, new File(destination).getParent())) {
-                guestSession.directoryCreate(new File(destination).getParent(), 600L, Arrays.asList(DirectoryCreateFlag.None));
-            }
-            IProgress process = guestSession.copyTo(sourceFile.getPath(), destination, Arrays.asList(CopyFileFlag.None));
-            process.waitForCompletion(-1);
-        } finally {
-            if (guestSession != null) {
-                guestSession.close();
-            }
-            this.virtualBoxManager.closeMachineSession(session);
+        // We are having issue with some escaping (espacially '"'), so we do a little trick by encoding the content to base64.
+        List<String> builder = this.createSplittedBase64Content(content);
 
+        // Send content in base64.
+        for (String line : builder) {
+            this.executePowershellCommand(machineGuid, login, password, String.format("Add-Content -Value '%s' -Path %s", line, destination), endTime);
         }
+
+        // Decode remote base64 file.
+        this.executePowershellCommand(machineGuid, login, password,
+                String.format("[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String((Get-Content %s))) | Set-Content %s",
+                        destination, destination), endTime);
     }
 
-    /**
-     * /!\ Hack /!\
-     * This method encapsulate IGuestSession.directoryExists because it throws an Exception when the directory doesn't exists on the guest.
-     * 
-     * @return true if the directory exists, false if not.
-     */
-    private boolean directoryExists(IGuestSession guestSession, String path) {
-        try {
-            return guestSession.directoryExists(path);
-        } catch (Exception e) {
-            return false;
-        }
+    void executePowershellCommand(String machineGuid, String login, String password, String powershellCommand, long endTime) throws Exception {
+        this.executeCommand(machineGuid, login, password, "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+                Arrays.asList(
+                        "-InputFormat",
+                        "none",
+                        "-NoProfile",
+                        "-ExecutionPolicy", "RemoteSigned",
+                        "-Command", "& {" + powershellCommand + "}"),
+                endTime);
     }
 
     public void ping(String machineGuid, String login, String password, long endTime) throws Exception {
         // do a PING command just to test if it's up
-        this.executeCommand(machineGuid, login, password, WINDOWS_SCRIPT_FOLDER + "PING.EXE", Arrays.asList(new String[0]),
-                Arrays.asList(new String[0]), endTime);
+        this.executeCommand(machineGuid, login, password, WINDOWS_SCRIPT_FOLDER + "PING.EXE", endTime);
     }
 
     public void grantAccessToSharedFolder(String machineGuid, String login, String password, long endTime) throws Exception {
@@ -133,21 +112,17 @@ public class WindowsGuest extends BaseGuest {
     public void runCommandsBeforeBootstrap(String machineGuid, String login, String password, long endTime) throws Exception {
         // Set timezone to GMT+1
         this.executeCommand(machineGuid, login, password, "C:/Windows/System32/tzutil.exe", Arrays.asList(new String[] { "/s", "Romance Standard Time" }),
-                Arrays.asList(new String[0]), endTime);
+                endTime);
 
         // Reboot the VM for updates to be considerate (especially hostname, network ip)...
         this.reboot(machineGuid, login, password, endTime);
 
         // Start the WinRM service on the guest.
-        this.executeCommand(machineGuid, login, password, "C:/Windows/System32/sc.exe", Arrays.asList(new String[] { "start", "WinRM" }),
-                Arrays.asList(new String[0]), endTime);
-
-        // TODO Start Samba service
+        this.executeCommand(machineGuid, login, password, "C:/Windows/System32/sc.exe", Arrays.asList(new String[] { "start", "WinRM" }), endTime);
     }
 
     void reboot(String machineGuid, String login, String password, long endTime) throws Exception {
-        this.executeCommand(machineGuid, login, password, "C:/Windows/System32/shutdown.exe", Arrays.asList(new String[] { "/r", "/t", "0", "/f" }),
-                Arrays.asList(new String[0]), endTime);
+        this.executeCommand(machineGuid, login, password, "C:/Windows/System32/shutdown.exe", Arrays.asList(new String[] { "/r", "/t", "0", "/f" }), endTime);
 
         // Wait the reboot command to be applied
         Thread.sleep(SERVER_POLLING_INTERVAL_MILLIS);
@@ -169,4 +144,5 @@ public class WindowsGuest extends BaseGuest {
 
         Thread.sleep(SERVER_POLLING_INTERVAL_MILLIS);
     }
+
 }

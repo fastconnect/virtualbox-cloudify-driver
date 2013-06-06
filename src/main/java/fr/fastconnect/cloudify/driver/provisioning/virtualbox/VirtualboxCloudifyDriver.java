@@ -157,7 +157,7 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
     public MachineDetails startMachine(String locationId, long duration, TimeUnit unit)
             throws TimeoutException, CloudProvisioningException {
 
-        logger.info("Start VBox machine");
+        logger.info(String.format("Start VBox machine (timeout = %s ms)", unit.toMillis(duration)));
 
         final long endTime = System.currentTimeMillis() + unit.toMillis(duration);
 
