@@ -64,13 +64,11 @@ cloud {
         //apiKey "ENTER_API_KEY"
         apiKey ""
 
-
         //keyFile "ENTER_KEY_FILE"
     }
 
     cloudStorage {
         templates ([
-
             SMALL_BLOCK : storageTemplate{
                 deleteOnExit true
                 size 1
@@ -100,7 +98,33 @@ cloud {
                 options ([:])
                 overrides ([:])
                 custom ([
-                    "vbox.storageControllerName" : "SATA Controller", // Optional (default: "SATA Controller")
+                    "vbox.storageControllerName" : LINUX_STORAGE_CONTROLLER_NAME, // Optional (default: "SATA Controller")
+                ])
+            },
+            SMALL_WIN : computeTemplate{
+                // Mandatory. Image ID.
+                imageId "precise64-win2k8r2"
+                // Mandatory. Amount of RAM available to machine.
+                machineMemoryMB 1024
+                username  "vagrant"
+                password  "vagrant"
+                // Mandatory. Files from the local directory will be copied to this directory on the remote machine.
+                remoteDirectory "/C\$/gs-files"
+                // Mandatory. All files from this LOCAL directory will be copied to the remote machine directory.
+                localDirectory "upload"
+                
+                // File transfer mode. Optional, defaults to SCP.
+                fileTransfer org.cloudifysource.dsl.cloud.FileTransferModes.CIFS
+                // Remote execution mode. Options, defaults to SSH.
+                remoteExecution org.cloudifysource.dsl.cloud.RemoteExecutionModes.WINRM
+                // Script language for remote execution. Defaults to Linux Shell.
+                scriptLanguage org.cloudifysource.dsl.cloud.ScriptLanguages.WINDOWS_BATCH
+                
+                privileged true 
+                options ([:])
+                overrides ([:])
+                custom ([
+                    "vbox.storageControllerName" : WINDOWS_STORAGE_CONTROLLER_NAME, // Optional (default: "SATA Controller")
                 ])
             }
         ])
@@ -118,7 +142,7 @@ cloud {
         "vbox.privateInterfaceName" : PRIVATE_IF_NAME, // Optional (default: "eth0". On windows VM the name should be set to "Local Area Connection")
         "vbox.publicInterfaceName" : PUBLIC_IF_NAME, // Optional (default: "eth1". On windows VM the name should be set to "Local Area Connection 2")
         "vbox.storageControllerName" : STORAGE_CONTROLLER_NAME, // Optional (default: "SATA Controller")
-        "vbox.destroyManagementMachineOnError" : DESTROY_ON_ERROR // Optional (default: "true")
+        "vbox.destroyMachines" : DESTROY_MACHINES // Optional (default: "true"). For DEBUG purpose.
     ])
 }
 

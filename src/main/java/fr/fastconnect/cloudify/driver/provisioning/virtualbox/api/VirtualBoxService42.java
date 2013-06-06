@@ -405,7 +405,7 @@ public class VirtualBoxService42 implements VirtualBoxService {
                 try {
                     session.unlockMachine();
                 } catch (Exception e) {
-                    logger.log(Level.WARNING, "Could not unlock machine", e);
+                    logger.log(Level.WARNING, "Could not unlock machine: " + e.getMessage());
                 }
             }
         } finally {

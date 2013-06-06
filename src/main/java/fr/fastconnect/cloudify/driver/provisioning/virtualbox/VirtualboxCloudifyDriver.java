@@ -39,7 +39,7 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
     private static final String VBOX_SHARED_FOLDER = "vbox.sharedFolder";
     private static final String VBOX_PRIVATE_INTERFACE_NAME = "vbox.privateInterfaceName";
     private static final String VBOX_PUBLIC_INTERFACE_NAME = "vbox.publicInterfaceName";
-    private static final String VBOX_DESTROY_MANAGEMENT_MACHINE_ON_ERROR = "vbox.destroyManagementMachineOnError";
+    private static final String VBOX_DESTROY_MACHINES = "vbox.destroyMachines";
 
     private static final int DEFAULT_SHUTDOWN_TIMEOUT_MILLIS = 5 * 60 * 1000; // 5 minutes
 
@@ -55,7 +55,7 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
     private String hostSharedFolder;
     private String privIfName;
     private String pubIfName;
-    private boolean destroyManagementMachineOnError;
+    private boolean destroyMachines;
 
     private boolean headless;
 
@@ -145,8 +145,8 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
 
         this.privIfName = StringUtils.defaultIfEmpty((String) this.cloud.getCustom().get(VBOX_PRIVATE_INTERFACE_NAME), "eth0");
         this.pubIfName = StringUtils.defaultIfEmpty((String) this.cloud.getCustom().get(VBOX_PUBLIC_INTERFACE_NAME), "eth1");
-        String destroyString = (String) this.cloud.getCustom().get(VBOX_DESTROY_MANAGEMENT_MACHINE_ON_ERROR);
-        this.destroyManagementMachineOnError = destroyString == null ? true : BooleanUtils.toBoolean(destroyString);
+        String destroyString = (String) this.cloud.getCustom().get(VBOX_DESTROY_MACHINES);
+        this.destroyMachines = destroyString == null ? true : BooleanUtils.toBoolean(destroyString);
 
         String storageControllerName = StringUtils.defaultIfEmpty((String) this.cloud.getCustom().get(VBOX_STORAGE_CONTROLLER_NAME), "SATA Controller");
         storageControllerName = StringUtils.defaultIfEmpty((String) this.template.getCustom().get(VBOX_STORAGE_CONTROLLER_NAME), storageControllerName);
@@ -349,19 +349,21 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
             // in case of an exception, clear the machines
             logger.warning("Provisioning of management machines failed, the following node will be shut down: " + machines);
 
-            if (this.destroyManagementMachineOnError) {
-                for (final MachineDetails machineDetails : machines) {
-                    try {
-                        // TODO : do it in a thread to detect TIMEOUT
-                        this.virtualBoxService.stop(machineDetails.getMachineId(), endTime);
+            for (final MachineDetails machineDetails : machines) {
+                try {
+                    // TODO : do it in a thread to detect TIMEOUT
+                    this.virtualBoxService.stop(machineDetails.getMachineId(), endTime);
+                    if (this.destroyMachines) {
                         this.virtualBoxService.destroy(machineDetails.getMachineId(), endTime);
-                    } catch (final Exception e) {
-                        logger.log(
-                                Level.SEVERE,
-                                "While shutting down machine after provisioning of management machines failed, "
-                                        + "shutdown of node: " + machineDetails.getMachineId()
-                                        + " failed. This machine may be leaking. Error was: " + e.getMessage(), e);
+                    } else {
+                        logger.warning(String.format("According to the configuration, the machine '%s' is not destroy", machineDetails.getMachineId()));
                     }
+                } catch (final Exception e) {
+                    logger.log(
+                            Level.SEVERE,
+                            "While shutting down machine after provisioning of management machines failed, "
+                                    + "shutdown of node: " + machineDetails.getMachineId()
+                                    + " failed. This machine may be leaking. Error was: " + e.getMessage(), e);
                 }
             }
 
@@ -405,7 +407,11 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
                 logger.log(Level.WARNING,
                         String.format("Couldn't stop the machine (%s,%s) properly, but it will be killed.", info.getMachineName(), info.getGuid()), e);
             }
-            this.virtualBoxService.destroy(info.getGuid(), endTime);
+            if (this.destroyMachines) {
+                this.virtualBoxService.destroy(info.getGuid(), endTime);
+            } else {
+                logger.warning(String.format("According to the configuration, the machine '%s' is not destroy", info.getGuid()));
+            }
 
             return true;
         } catch (Exception ex) {
@@ -430,7 +436,11 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
                     logger.log(Level.WARNING,
                             String.format("Couldn't stop the machine (%s,%s) properly, but it will be killed.", info.getMachineName(), info.getGuid()), e);
                 }
-                this.virtualBoxService.destroy(info.getGuid(), endTime);
+                if (this.destroyMachines) {
+                    this.virtualBoxService.destroy(info.getGuid(), endTime);
+                } else {
+                    logger.warning(String.format("According to the configuration, the machine '%s' is not destroy", info.getGuid()));
+                }
             }
         } catch (final Exception e) {
             throw new CloudProvisioningException("Failed to shut down managememnt machines", e);
