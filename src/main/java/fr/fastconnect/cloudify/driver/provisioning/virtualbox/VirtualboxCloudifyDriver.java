@@ -109,12 +109,12 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
     }
 
     @Override
-    public void setConfig(Cloud cloud, String cloudTemplate, boolean management, String serviceName,
-            boolean performValidation) {
-        super.setConfig(cloud, cloudTemplate, management, serviceName, performValidation);
+    public void setConfig(final Cloud cloud, final String templateName, final boolean management, 
+            final String serviceName) {
+        super.setConfig(cloud, templateName, management, serviceName);
 
         if (this.template.getUsername() == null) {
-            logger.log(Level.WARNING, "Username is not set in the template " + cloudTemplate);
+            logger.log(Level.WARNING, "Username is not set in the template " + templateName);
         }
 
         if (this.management) {
@@ -464,4 +464,9 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
         context.setManagement(this.management);
         return context;
     }
+
+    public void onServiceUninstalled(long duration, TimeUnit unit) throws InterruptedException, TimeoutException, CloudProvisioningException {
+        
+    }
+
 }
