@@ -34,7 +34,7 @@ public class VirtualboxCloudifyDriverIT {
     @Before
     public void before() {
         cloud = this.createCloud(null);
-        driver.setConfig(cloud, templateName, true, null, false);
+        driver.setConfig(cloud, templateName, true, null);
     }
 
     @Test
