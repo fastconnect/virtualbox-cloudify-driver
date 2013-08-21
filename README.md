@@ -1,7 +1,7 @@
 Prerequisite
 ------------
 
-* Have [Cloudify >= 2.5](http://www.gigaspaces.com/cloudify-open-paas-stack) installed.
+* Have [Cloudify >= 2.6](http://www.gigaspaces.com/cloudify-open-paas-stack) installed.
 * Have [VirtualBox](https://www.virtualbox.org/) installed. On you local machine or on a server. Tested with 4.2.4.
 * Create a ["HostOnlyInterface"](https://www.virtualbox.org/manual/ch06.html#network_hostonly) (don't need a DHCP). Ex: IP 27.0.0.1 NetMask 255.255.255.0
 * Start the [VirtualBox WebService](http://download.virtualbox.org/virtualbox/SDKRef.pdf) on the IP of the "HostOnlyInterface" you want to use. Ex:
@@ -54,7 +54,7 @@ Here is the POM configuration to include the driver:
 	<dependency>
 		<groupId>fr.fastconnect</groupId>
 		<artifactId>virtualbox-cloudify-driver</artifactId>
-		<version>1.12</version>
+		<version>1.13</version>
 		<exclusions>
 			<exclusion>
 				<artifactId>esc</artifactId>
@@ -69,7 +69,7 @@ Here is the POM configuration to include the driver:
 </dependencies>
 ```
 
-Here is the full URL: https://fastconnect.org/maven/content/repositories/opensource/fr/fastconnect/virtualbox-cloudify-driver/1.12/virtualbox-cloudify-driver-1.12.jar
+Here is the full URL: https://fastconnect.org/maven/content/repositories/opensource/fr/fastconnect/virtualbox-cloudify-driver/1.13/virtualbox-cloudify-driver-1.13.jar
 
 
 Copyright and license

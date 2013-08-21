@@ -31,9 +31,6 @@ cloud {
 
         // Mandatory. The prefix for new machines started for servies.
         machineNamePrefix "app-agent-"
-        // Optional. Defaults to true. Specifies whether cloudify should try to deploy services on the management machine.
-        // Do not change this unless you know EXACTLY what you are doing.
-        dedicatedManagementMachines true
 
         //
         managementOnlyFiles ([])
