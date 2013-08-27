@@ -98,9 +98,10 @@ Status:          Down
 VBoxNetworkName: HostInterfaceNetworking-vboxnet0
 ```
 The status here is **Down**.
-To activate the HostOnlyInterface, you can use reconfigure the interface to enable it:
+To activate the HostOnlyInterface on Linux/MacOS, you can use the **ifconfig** command:
 ```
 $ VBoxManage hostonlyif ipconfig vboxnet0 --ip 25.0.0.1 --netmask 255.255.255.0
+$ sudo ifconfig vboxnet0 up
 ```
 
 You can do it graphically:
