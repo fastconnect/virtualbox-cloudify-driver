@@ -21,6 +21,9 @@ import org.cloudifysource.esc.driver.provisioning.MachineDetails;
 import org.cloudifysource.esc.driver.provisioning.ProvisioningDriver;
 import org.cloudifysource.esc.driver.provisioning.context.ProvisioningDriverClassContext;
 
+import com.google.common.base.Strings;
+
+import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.VirtualBoxBoxNotFoundException;
 import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.VirtualBoxHostOnlyInterface;
 import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.VirtualBoxMachineInfo;
 import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.VirtualBoxService;
@@ -113,7 +116,7 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
             final String serviceName) {
         super.setConfig(cloud, templateName, management, serviceName);
 
-        if (this.template.getUsername() == null) {
+        if (Strings.isNullOrEmpty(this.template.getUsername())) {
             logger.log(Level.WARNING, "Username is not set in the template " + templateName);
         }
 
@@ -124,17 +127,17 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
         }
 
         this.boxesPath = (String) this.cloud.getCustom().get(VBOX_BOXES_PATH);
-        if (this.boxesPath == null) {
+        if (Strings.isNullOrEmpty(this.boxesPath)) {
             throw new IllegalArgumentException("Custom field '" + VBOX_BOXES_PATH + "' must be set");
         }
 
         this.hostonlyifName = (String) this.cloud.getCustom().get(VBOX_HOSTONLYIF);
-        if (this.hostonlyifName == null) {
+        if (Strings.isNullOrEmpty(this.hostonlyifName)) {
             throw new IllegalArgumentException("Custom field '" + VBOX_HOSTONLYIF + "' must be set");
         }
 
         this.virtualBoxUrl = (String) this.cloud.getCustom().get(VBOX_URL);
-        if (this.virtualBoxUrl == null) {
+        if (Strings.isNullOrEmpty(this.virtualBoxUrl)) {
             throw new IllegalArgumentException("Custom field '" + VBOX_URL + "' must be set");
         }
 
@@ -151,7 +154,7 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
         String storageControllerName = StringUtils.defaultIfEmpty((String) this.cloud.getCustom().get(VBOX_STORAGE_CONTROLLER_NAME), "SATA Controller");
         storageControllerName = StringUtils.defaultIfEmpty((String) this.template.getCustom().get(VBOX_STORAGE_CONTROLLER_NAME), storageControllerName);
         virtualBoxService.setStorageControllerName(storageControllerName);
-        logger.log(Level.INFO, "[VBOX] Storage Controller Name = " + storageControllerName);
+        logger.log(Level.INFO, "Storage Controller Name = " + storageControllerName);
     }
 
     public MachineDetails startMachine(String locationId, long duration, TimeUnit unit)
@@ -181,9 +184,11 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
         String machineTemplate = this.template.getImageId();
 
         File boxesPathFile = new File(this.boxesPath);
-        File machineTemplateFolderFile = new File(boxesPathFile, machineTemplate);
-        File machineTemplateOvfFile = new File(machineTemplateFolderFile, "box.ovf");
-
+        File machineTemplateOldFolderFile = new File(boxesPathFile, machineTemplate);
+        File machineTemplateNewFolderFile = new File(machineTemplateOldFolderFile, "virtualbox");
+        File machineTemplateOldOvfFile = new File(machineTemplateOldFolderFile, "box.ovf");
+        File machineTemplateNewOvfFile = new File(machineTemplateNewFolderFile, "box.ovf");
+        
         mutex.lock();
         try {
             VirtualBoxMachineInfo vboxInfo;
@@ -215,15 +220,29 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
                 }
                 addressIP = this.baseIP + "." + lastIP;
 
-                // go to the folder with "boxes"
-                vboxInfo = this.virtualBoxService.create(
-                        machineTemplateOvfFile.toString(),
-                        this.serverNamePrefix + id,
-                        numberOfCores,
-                        machineMemoryMB,
-                        this.hostonlyifName,
-                        this.hostSharedFolder,
-                        endTime);
+                try {
+                    // in the new version of vagrant, boxes are stored in a subfolder depending of the virtualisation tool (virtualbox/vmware/etc.)
+                    // try the new version, if crashes, fallback to old version
+                    vboxInfo = this.virtualBoxService.create(
+                            machineTemplateNewOvfFile.toString(),
+                            this.serverNamePrefix + id,
+                            numberOfCores,
+                            machineMemoryMB,
+                            this.hostonlyifName,
+                            this.hostSharedFolder,
+                            endTime);
+                }
+                catch(VirtualBoxBoxNotFoundException vboxboxnfe) {
+                    
+                    vboxInfo = this.virtualBoxService.create(
+                            machineTemplateOldOvfFile.toString(),
+                            this.serverNamePrefix + id,
+                            numberOfCores,
+                            machineMemoryMB,
+                            this.hostonlyifName,
+                            this.hostSharedFolder,
+                            endTime);
+                }
 
                 // we can release the mutex now, the VM is created
             } finally {
