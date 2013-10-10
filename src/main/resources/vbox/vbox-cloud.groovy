@@ -135,13 +135,14 @@ cloud {
 
     custom ([
         "vbox.boxes.path" : BOXES_PATH,
+        "vbox.boxes.provider" : BOXES_PROVIDER, // Since vagrant 1.1.x, the provider is included in boxes path. i.e. : ${vbox.boxes.path}/precise64/virtualbox/box.ovf, the provider is '/virtualbox/'.
         "vbox.bridgedInterface" : BRIDGED_INTERFACE, // Choose between host only or bridge interface to handle public address network. 
         //"vbox.hostOnlyInterface" : HOST_ONLY_INTERFACE, // Host only interface is for demo purpose, because when your network card is disable, the public interface is also disable in vbox VM.
         "vbox.serverUrl" : SERVER_URL,
-        "vbox.headless" : "true", // Optional
-        "vbox.sharedFolder" : SHARED_FOLDER, // Optional
+        "vbox.headless" : "true", // Optional.
+        "vbox.sharedFolder" : SHARED_FOLDER, // Optional.
         "vbox.destroyMachines" : DESTROY_MACHINES // Optional (default: "true"). For DEBUG purpose.
-        // "vbox.storageControllerName" : STORAGE_CONTROLLER_NAME, // Optional (default: "SATA Controller")
+        // "vbox.storageControllerName" : STORAGE_CONTROLLER_NAME, // Optional (default: "SATA Controller").
     ])
 }
 

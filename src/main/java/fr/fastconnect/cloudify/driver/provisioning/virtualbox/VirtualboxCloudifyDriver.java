@@ -32,6 +32,7 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
             .getLogger(VirtualboxCloudifyDriver.class.getName());
 
     public static final String VBOX_BOXES_PATH = "vbox.boxes.path";
+    public static final String VBOX_BOXES_PROVIDER = "vbox.boxes.provider";
     public static final String VBOX_STORAGE_CONTROLLER_NAME = "vbox.storageControllerName";
     public static final String VBOX_HOSTONLYIF = "vbox.hostOnlyInterface";
     public static final String VBOX_BRIDGEDIF = "vbox.bridgedInterface";
@@ -41,10 +42,12 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
     public static final String VBOX_DESTROY_MACHINES = "vbox.destroyMachines";
 
     private static final int DEFAULT_SHUTDOWN_TIMEOUT_MILLIS = 5 * 60 * 1000; // 5 minutes
+    private static final String DEFAULT_BOXES_PROVIDER = "virtualbox";
 
     private static final ReentrantLock mutex = new ReentrantLock();
 
     private String boxesPath;
+    private String boxesProvider;
     private String virtualBoxUrl;
 
     private PublicInterfaceConfig publicIfConfig;
@@ -107,6 +110,8 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
         if (this.boxesPath == null) {
             throw new IllegalArgumentException("Custom field '" + VBOX_BOXES_PATH + "' must be set");
         }
+        String boxesProviderString = (String) this.cloud.getCustom().get(VBOX_BOXES_PROVIDER);
+        this.boxesProvider = StringUtils.isEmpty(boxesProviderString) ? null : boxesProviderString;
 
         String hostonlyifName = (String) this.cloud.getCustom().get(VBOX_HOSTONLYIF);
         String bridgeifName = (String) this.cloud.getCustom().get(VBOX_BRIDGEDIF);
@@ -162,12 +167,8 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
 
         int numberOfCores = this.template.getNumberOfCores();
         int machineMemoryMB = this.template.getMachineMemoryMB();
-
         String machineTemplate = this.template.getImageId();
-
-        File boxesPathFile = new File(this.boxesPath);
-        File machineTemplateFolderFile = new File(boxesPathFile, machineTemplate);
-        File machineTemplateOvfFile = new File(machineTemplateFolderFile, "box.ovf");
+        File machineTemplateOvfFile = this.getOvfFile(machineTemplate);
 
         mutex.lock();
         try {
@@ -268,6 +269,26 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
             throw new CloudProvisioningException(e);
         }
         return md;
+    }
+
+    private File getOvfFile(String machineTemplate) throws CloudProvisioningException {
+        File boxesPathFile = new File(this.boxesPath);
+        File machineTemplateFolderFile = new File(boxesPathFile, machineTemplate);
+        File machineTemplateOvfFile = null;
+        if (this.boxesProvider != null) {
+            machineTemplateFolderFile = new File(machineTemplateFolderFile, this.boxesProvider);
+            machineTemplateOvfFile = new File(machineTemplateFolderFile, "box.ovf");
+        } else {
+            machineTemplateOvfFile = new File(machineTemplateFolderFile, "box.ovf");
+            if (!machineTemplateOvfFile.isFile()) {
+                machineTemplateFolderFile = new File(machineTemplateFolderFile, DEFAULT_BOXES_PROVIDER);
+                machineTemplateOvfFile = new File(machineTemplateFolderFile, "box.ovf");
+            }
+        }
+        if (!machineTemplateOvfFile.isFile()) {
+            throw new CloudProvisioningException("Wrong path to 'box.ovf' file: " + machineTemplateOvfFile.getAbsolutePath());
+        }
+        return machineTemplateOvfFile;
     }
 
     public MachineDetails[] startManagementMachines(long duration, TimeUnit timeout)

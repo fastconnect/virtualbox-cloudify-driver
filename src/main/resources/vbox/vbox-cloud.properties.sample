@@ -1,6 +1,7 @@
 // Vbox configuration
 IMAGE_ID="precise64"
 BOXES_PATH="C:\\Users\\victor\\.vagrant.d\\boxes"
+BOXES_PROVIDER="virtualbox"
 SERVER_URL="http://26.0.0.1:18083"
 SHARED_FOLDER="C:\\Users\\victor\\.vagrant.d\\boxes"
 DESTROY_MACHINES="true"
