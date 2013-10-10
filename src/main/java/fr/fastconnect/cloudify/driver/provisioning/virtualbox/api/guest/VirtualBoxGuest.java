@@ -6,8 +6,7 @@ public interface VirtualBoxGuest {
 
     void updateHosts(String machineGuid, String login, String password, String hosts, long endTime) throws Exception;
 
-    void updateNetworkingInterfaces(String machineGuid, String login, String password, String privIfName, String pubIfName, String ip, String mask,
-            String gateway, long endTime) throws Exception;
+    void updateNetworkingInterfaces(String machineGuid, String login, String password, String privateAddrIP, long endTime) throws Exception;
 
     void executeScript(String machineGuid, String login, String password, String filename, String content, long endTime) throws Exception;
 
@@ -18,5 +17,9 @@ public interface VirtualBoxGuest {
     void grantAccessToSharedFolder(String machineGuid, String login, String password, long endTime) throws Exception;
 
     void runCommandsBeforeBootstrap(String machineGuid, String login, String password, long endTime) throws Exception;
+
+    String getPublicAddressIP(String machineNameOrId) throws Exception;
+
+    String getPrivateAddressIP(String machineNameOrId) throws Exception;
 
 }

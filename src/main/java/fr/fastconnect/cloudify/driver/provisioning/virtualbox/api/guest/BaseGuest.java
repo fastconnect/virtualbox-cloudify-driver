@@ -88,18 +88,15 @@ public abstract class BaseGuest implements VirtualBoxGuest {
             try {
 
                 long timeLeft = endTime - System.currentTimeMillis();
-                IGuestProcess process = guestSession.processCreate(command, args, envs, Arrays.asList(ProcessCreateFlag.None), timeLeft);
+                IGuestProcess process = guestSession.processCreate(command, args, envs,
+                        Arrays.asList(ProcessCreateFlag.None), timeLeft);
+
                 timeLeft = endTime - System.currentTimeMillis();
-
-                // process.waitForArray(Arrays.asList(ProcessWaitForFlag.Terminate, ProcessWaitForFlag.StdErr, ProcessWaitForFlag.StdOut), 60l*1000);
-                // process.waitForArray(Arrays.asList(ProcessWaitForFlag.Terminate), 60l*1000);
                 process.waitFor(new Long(ProcessWaitForFlag.Terminate.value()), timeLeft);
-
                 if (process.getStatus() != ProcessStatus.TerminatedNormally) {
                     throw new VirtualBoxException("Unable to execute command '" + command + " " + StringUtils.join(args, ' ') + "': Status "
                             + process.getStatus() + " ExitCode " + process.getExitCode());
                 }
-
                 // TODO: get the stdout/stderr with this webservice...
                 return process.getPID();
             } finally {
@@ -114,6 +111,54 @@ public abstract class BaseGuest implements VirtualBoxGuest {
     public void runCommandsBeforeBootstrap(String machineGuid, String login, String password, long endTime) throws Exception {
         // Do nothing by default
         return;
+    }
+
+    /**
+     * Retrieve the public IP address of the given machine.<br />
+     * The code suppose that the public address is always defined in the slot #2.<br />
+     * i.e :
+     * <ul>
+     * <li>slot 0 -> NAT</li>
+     * <li>slot 1 -> private interface</li>
+     * <li>slot 2 -> public interface</li>
+     * </ul>
+     * 
+     * @param machineNameOrId
+     *            The machine name or the id of the machine.
+     * 
+     * @return The public IP address of the machine or <code>null</code> if no IP has been found.
+     */
+    public String getPublicAddressIP(String machineNameOrId) throws Exception {
+        IMachine m = this.virtualBoxManager.getVBox().findMachine(machineNameOrId);
+        String ipAddress = m.getGuestPropertyValue("/VirtualBox/GuestInfo/Net/2/V4/IP");
+        return ipAddress;
+    }
+
+    /**
+     * Retrieve the private IP address of the given machine.<br />
+     * The code suppose that the private address is always defined in the slot #1.<br />
+     * i.e :
+     * <ul>
+     * <li>slot 0 -> NAT</li>
+     * <li>slot 1 -> private interface</li>
+     * <li>slot 2 -> public interface</li>
+     * </ul>
+     * 
+     * @param machineNameOrId
+     *            The machine name or the id of the machine.
+     * 
+     * @return The private IP address of the machine or <code>null</code> if no IP has been found.
+     */
+    public String getPrivateAddressIP(String machineNameOrId) throws Exception {
+        IMachine m = this.virtualBoxManager.getVBox().findMachine(machineNameOrId);
+        String ipAddress = m.getGuestPropertyValue("/VirtualBox/GuestInfo/Net/1/V4/IP");
+        return ipAddress;
+    }
+
+    protected String getFormattedMACAddress(IMachine machine, long slot) {
+        String macAddr = machine.getNetworkAdapter(slot).getMACAddress();
+        return macAddr.substring(0, 2) + ":" + macAddr.substring(2, 4) + ":" + macAddr.substring(4, 6) + ":" + macAddr.substring(6, 8) + ":"
+                + macAddr.substring(8, 10) + ":" + macAddr.substring(10, 12);
     }
 
 }

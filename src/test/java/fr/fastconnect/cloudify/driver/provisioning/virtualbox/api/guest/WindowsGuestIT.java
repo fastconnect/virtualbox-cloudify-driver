@@ -22,7 +22,7 @@ public class WindowsGuestIT {
 
     private IMachine machine;
 
-    private String vboxWSURL = "http://25.0.0.1:18083";
+    private String vboxWSURL = "http://26.0.0.1:18083";
     private String vboxWSUsr = "";
     private String vboxWSPwd = "";
     private String machineName = "app-management-1";
@@ -68,9 +68,7 @@ public class WindowsGuestIT {
 
     @Test
     public void testUpdateNetworkingInterfaces() throws Exception {
-        String network1 = "Local Area Connection";
-        String network2 = "Local Area Connection 2";
-        guest.updateNetworkingInterfaces(machine.getId(), remoteUsr, remotePwd, network1, network2, "25.0.0.2", "255.255.255.0", "25.0.0.1", END_TIME);
+        guest.updateNetworkingInterfaces(machine.getId(), remoteUsr, remotePwd, "25.0.0.9", END_TIME);
     }
 
     @Test
@@ -184,5 +182,42 @@ public class WindowsGuestIT {
                 String.format(
                         "[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String((Get-Content c:\\tmp\\toto.txt))) | Set-Content c:\\tmp\\toto.txt",
                         base64), END_TIME);
+    }
+
+    @Test
+    public void test() throws Exception {
+        // List<IHostNetworkInterface> networkInterfaces = virtualBoxManager.getVBox().getHost().getNetworkInterfaces();
+        // for (IHostNetworkInterface ni : networkInterfaces) {
+        // System.out.println("name=" + ni.getName());
+        // System.out.println("networkName=" + ni.getNetworkName());
+        // System.out.println("ip=" + ni.getIPAddress());
+        // System.out.println();
+        // }
+
+        IMachine m = virtualBoxManager.getVBox().findMachine(machine.getId());
+        String networkCount = m.getGuestPropertyValue("/VirtualBox/GuestInfo/Net/Count");
+        int count = Integer.parseInt(networkCount);
+        System.out.println(m.getNetworkAdapter(1l).getBridgedInterface());
+        System.out.println(m.getNetworkAdapter(1l).getHostOnlyInterface());
+        System.out.println(m.getNetworkAdapter(2l).getBridgedInterface());
+        System.out.println(m.getNetworkAdapter(2l).getHostOnlyInterface());
+        for (int i = 0; i < count; i++) {
+            String guestPropertyValue = m.getGuestPropertyValue(String.format("/VirtualBox/GuestInfo/Net/%s/V4/IP", i));
+            System.out.println(guestPropertyValue);
+            // if (guestPropertyValue != null) {
+            // InetAddress inetadrr = InetAddress.getByName(guestPropertyValue);
+            // if (inetadrr.isReachable(5000)) {
+            // System.out.println("[" + i + "] public addr=" + guestPropertyValue);
+            // } else {
+            // System.out.println("[" + i + "] addr=" + guestPropertyValue);
+            // }
+            // }
+        }
+    }
+
+    @Test
+    public void testGuest() throws Exception {
+        UbuntuGuest guest = new UbuntuGuest(virtualBoxManager);
+        guest.ping(machine.getId(), "vagrant", "vagrant", 10000);
     }
 }

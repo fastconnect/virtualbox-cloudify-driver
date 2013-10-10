@@ -10,7 +10,7 @@ cloud {
         className "fr.fastconnect.cloudify.driver.provisioning.virtualbox.VirtualboxCloudifyDriver"
         storageClassName "fr.fastconnect.cloudify.driver.provisioning.virtualbox.VirtualBoxStorageDriver"
         // Optional. The template name for the management machines. Defaults to the first template in the templates section below.
-        managementMachineTemplate "MEDIUM_LINUX"
+        managementMachineTemplate "SMALL_LINUX"
         //managementStorageTemplate "SMALL_BLOCK"
         // Optional. Indicates whether internal cluster communications should use the machine private IP. Defaults to true.
         connectToPrivateIp false
@@ -33,7 +33,7 @@ cloud {
         machineNamePrefix "app-agent-"
         // Optional. Defaults to true. Specifies whether cloudify should try to deploy services on the management machine.
         // Do not change this unless you know EXACTLY what you are doing.
-        dedicatedManagementMachines true
+        // dedicatedManagementMachines true
 
         //
         managementOnlyFiles ([])
@@ -87,12 +87,15 @@ cloud {
     cloudCompute {
         templates ([
             SMALL_LINUX : computeTemplate{
-                imageId "precise64"
+                imageId IMAGE_ID
                 machineMemoryMB 1024
                 username  "vagrant"
                 password  "vagrant"
                 remoteDirectory "/home/vagrant/gs-files"
                 localDirectory "upload"
+                remoteExecution org.cloudifysource.dsl.cloud.RemoteExecutionModes.SSH
+                fileTransfer org.cloudifysource.dsl.cloud.FileTransferModes.SCP
+                scriptLanguage org.cloudifysource.dsl.cloud.ScriptLanguages.LINUX_SHELL
                 // enable sudo.
                 privileged true
                 options ([:])
@@ -103,7 +106,7 @@ cloud {
             },
             SMALL_WIN : computeTemplate{
                 // Mandatory. Image ID.
-                imageId "precise64-win2k8r2"
+                imageId IMAGE_ID
                 // Mandatory. Amount of RAM available to machine.
                 machineMemoryMB 1024
                 username  "vagrant"
@@ -130,19 +133,15 @@ cloud {
         ])
     }
 
-    /*****************
-     * Optional. Custom properties used to extend existing drivers or create new ones. 
-     */
     custom ([
         "vbox.boxes.path" : BOXES_PATH,
-        "vbox.hostonlyinterface" : HOST_ONLY_INTERFACE,
+        "vbox.bridgedInterface" : BRIDGED_INTERFACE, // Choose between host only or bridge interface to handle public address network. 
+        //"vbox.hostOnlyInterface" : HOST_ONLY_INTERFACE, // Host only interface is for demo purpose, because when your network card is disable, the public interface is also disable in vbox VM.
         "vbox.serverUrl" : SERVER_URL,
         "vbox.headless" : "true", // Optional
         "vbox.sharedFolder" : SHARED_FOLDER, // Optional
-        "vbox.privateInterfaceName" : PRIVATE_IF_NAME, // Optional (default: "eth0". On windows VM the name should be set to "Local Area Connection")
-        "vbox.publicInterfaceName" : PUBLIC_IF_NAME, // Optional (default: "eth1". On windows VM the name should be set to "Local Area Connection 2")
-        "vbox.storageControllerName" : STORAGE_CONTROLLER_NAME, // Optional (default: "SATA Controller")
         "vbox.destroyMachines" : DESTROY_MACHINES // Optional (default: "true"). For DEBUG purpose.
+        // "vbox.storageControllerName" : STORAGE_CONTROLLER_NAME, // Optional (default: "SATA Controller")
     ])
 }
 

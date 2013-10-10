@@ -8,12 +8,12 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Level;
 
+import org.apache.commons.lang.StringUtils;
 import org.virtualbox_4_2.CleanupMode;
 import org.virtualbox_4_2.DeviceType;
 import org.virtualbox_4_2.Holder;
 import org.virtualbox_4_2.IAppliance;
 import org.virtualbox_4_2.IConsole;
-import org.virtualbox_4_2.IHostNetworkInterface;
 import org.virtualbox_4_2.IMachine;
 import org.virtualbox_4_2.IMedium;
 import org.virtualbox_4_2.IMediumAttachment;
@@ -31,6 +31,7 @@ import org.virtualbox_4_2.jaxws.InvalidObjectFaultMsg;
 import org.virtualbox_4_2.jaxws.RuntimeFaultMsg;
 import org.virtualbox_4_2.jaxws.VboxPortType;
 
+import fr.fastconnect.cloudify.driver.provisioning.virtualbox.PublicInterfaceConfig;
 import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.guest.VirtualBoxGuest;
 import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.guest.VirtualBoxGuestProvider;
 
@@ -93,6 +94,23 @@ public class VirtualBoxService42 implements VirtualBoxService {
         } catch (Exception ex) {
             throw new VirtualBoxException("Unable to connect to " + url + " with login " + login, ex);
         }
+    }
+
+    public boolean isConnected() {
+        try {
+            if (this.virtualBoxManager.getVBox() == null) {
+                return false;
+            }
+            this.getAll();
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    public void disconnect() {
+        logger.log(Level.FINE, "Disconnecting VirtualBoxManager.");
+        virtualBoxManager.disconnect();
     }
 
     public VirtualBoxMachineInfo[] getAll() throws VirtualBoxException {
@@ -164,8 +182,8 @@ public class VirtualBoxService42 implements VirtualBoxService {
         }
     }
 
-    public VirtualBoxMachineInfo create(String boxPath, String vmname, long cpus, long memory, String hostOnlyInterface, String hostSharedFolder, long endTime)
-            throws Exception {
+    public VirtualBoxMachineInfo create(String boxPath, String vmname, long cpus, long memory, PublicInterfaceConfig publicIfConfig,
+            String hostSharedFolder, long endTime) throws Exception {
 
         logger.log(Level.INFO, "Trying to create VM '" + vmname + "' cpus:" + cpus + " memory:" + memory + " from template: " + boxPath);
 
@@ -238,17 +256,25 @@ public class VirtualBoxService42 implements VirtualBoxService {
                 machine.setCPUCount(cpus);
                 machine.setMemorySize(memory);
 
-                INetworkAdapter nic1 = machine.getNetworkAdapter(0l);
-                nic1.setNATNetwork("default");
-                nic1.setAttachmentType(NetworkAttachmentType.NAT);
+                INetworkAdapter nic0 = machine.getNetworkAdapter(0l);
+                nic0.setNATNetwork("default");
+                nic0.setAttachmentType(NetworkAttachmentType.NAT);
+                nic0.setEnabled(true);
+
+                INetworkAdapter nic1 = machine.getNetworkAdapter(1l);
+                nic1.setAttachmentType(NetworkAttachmentType.Internal);
                 nic1.setEnabled(true);
 
-                INetworkAdapter nic2 = machine.getNetworkAdapter(1l);
-                nic2.setAttachmentType(NetworkAttachmentType.HostOnly);
-                nic2.setHostOnlyInterface(hostOnlyInterface);
+                INetworkAdapter nic2 = machine.getNetworkAdapter(2l);
+                nic2.setAttachmentType(publicIfConfig.getAttachmentType());
+                if (NetworkAttachmentType.HostOnly.equals(publicIfConfig.getAttachmentType())) {
+                    nic2.setHostOnlyInterface(publicIfConfig.getInterfaceName());
+                } else {
+                    nic2.setBridgedInterface(publicIfConfig.getInterfaceName());
+                }
                 nic2.setEnabled(true);
 
-                if (hostSharedFolder != null && hostSharedFolder.length() > 0) {
+                if (StringUtils.isNotEmpty(hostSharedFolder)) {
                     machine.createSharedFolder(CLOUDIFY_SHARED_FOLDER, hostSharedFolder, true, true);
                 }
 
@@ -323,12 +349,9 @@ public class VirtualBoxService42 implements VirtualBoxService {
                 if (System.currentTimeMillis() > endTime) {
                     throw new TimeoutException("timeout creating server.");
                 }
-
                 Thread.sleep(SERVER_POLLING_INTERVAL_MILLIS);
             }
         }
-
-        // machine.getGuestPropertyValue("/VirtualBox/GuestInfo/Net/0/V4/IP")
 
         // Create a script to update the hostname
         guest.updateHostname(machineGuid, login, password, machine.getName(), endTime);
@@ -343,8 +366,7 @@ public class VirtualBoxService42 implements VirtualBoxService {
         guest.grantAccessToSharedFolder(machineGuid, login, password, endTime);
     }
 
-    public void updateNetworkingInterfaces(String machineGuid, String login, String password, String privIfName, String pubIfName,
-            String ip, String mask, String gateway, long endTime)
+    public void updateNetworkingInterfaces(String machineGuid, String login, String password, String privateAddrIP, long endTime)
             throws Exception {
 
         logger.log(Level.INFO, "Trying to update network interfaces on VM '" + machineGuid + "'");
@@ -352,7 +374,7 @@ public class VirtualBoxService42 implements VirtualBoxService {
         VirtualBoxManager manager = this.getVirtualBoxManager();
         IMachine machine = manager.getVBox().findMachine(machineGuid);
         VirtualBoxGuest guest = this.virtualBoxGuestProvider.getVirtualBoxGuest(machine.getOSTypeId());
-        guest.updateNetworkingInterfaces(machineGuid, login, password, privIfName, pubIfName, ip, mask, gateway, endTime);
+        guest.updateNetworkingInterfaces(machineGuid, login, password, privateAddrIP, endTime);
     }
 
     public void runCommandsBeforeBootstrap(String machineGuid, String login, String password, long endTime) throws Exception {
@@ -378,14 +400,12 @@ public class VirtualBoxService42 implements VirtualBoxService {
         logger.log(Level.INFO, "Trying to stop VM '" + machineGuid + "'");
 
         VirtualBoxManager manager = this.getVirtualBoxManager();
-
         IMachine m = manager.getVBox().findMachine(machineGuid);
 
         COMPUTE_MUTEX.lock();
         try {
 
             ISession session = manager.openMachineSession(m);
-            // m = session.getMachine();
             try {
                 IConsole console = session.getConsole();
 
@@ -413,20 +433,18 @@ public class VirtualBoxService42 implements VirtualBoxService {
         }
     }
 
-    public VirtualBoxHostOnlyInterface getHostOnlyInterface(String hostonlyifName) throws VirtualBoxException {
-
+    public String getPublicAddressIP(String machineNameOrId) throws Exception {
         VirtualBoxManager manager = this.getVirtualBoxManager();
+        IMachine machine = manager.getVBox().findMachine(machineNameOrId);
+        VirtualBoxGuest guest = this.virtualBoxGuestProvider.getVirtualBoxGuest(machine.getOSTypeId());
+        return guest.getPublicAddressIP(machineNameOrId);
+    }
 
-        for (IHostNetworkInterface hostonlyif : manager.getVBox().getHost().getNetworkInterfaces()) {
-            if (hostonlyif.getName().equals(hostonlyifName)) {
-                VirtualBoxHostOnlyInterface result = new VirtualBoxHostOnlyInterface();
-                result.setIp(hostonlyif.getIPAddress());
-                result.setMask(hostonlyif.getNetworkMask());
-                return result;
-            }
-        }
-
-        return null;
+    public String getPrivateAddressIP(String machineNameOrId) throws Exception {
+        VirtualBoxManager manager = this.getVirtualBoxManager();
+        IMachine machine = manager.getVBox().findMachine(machineNameOrId);
+        VirtualBoxGuest guest = this.virtualBoxGuestProvider.getVirtualBoxGuest(machine.getOSTypeId());
+        return guest.getPrivateAddressIP(machineNameOrId);
     }
 
     public VirtualBoxVolumeInfo[] getAllVolumesInfo() throws VirtualBoxException {

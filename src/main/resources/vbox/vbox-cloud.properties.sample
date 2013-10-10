@@ -1,0 +1,19 @@
+// Vbox configuration
+IMAGE_ID="precise64"
+BOXES_PATH="C:\\Users\\victor\\.vagrant.d\\boxes"
+SERVER_URL="http://26.0.0.1:18083"
+SHARED_FOLDER="C:\\Users\\victor\\.vagrant.d\\boxes"
+DESTROY_MACHINES="true"
+
+// Network configuration
+HOST_ONLY_INTERFACE="VirtualBox Host-Only Ethernet Adapter #2"
+BRIDGED_INTERFACE="Realtek PCIe GBE Family Controller"
+
+// Windows configuration
+WINDOWS_STORAGE_CONTROLLER_NAME="SATA"
+LINUX_STORAGE_CONTROLLER_NAME="SATA Controller"
+
+// Cloudify configuration 
+GIGASPACES_AGENT_ENV_JAVA_URL="http://192.168.6.143/vagrant_shared_files/jdk1.6.0_25_x64.zip"
+GIGASPACES_WINDOWS_JAVA_URL="http://192.168.6.143/vagrant_shared_files/jdk1.6.0_25_x64.zip"
+GIGASPACES_LINK="http://192.168.6.143/vagrant_shared_files/gigaspaces-cloudify-2.5.0-ga-b4010"

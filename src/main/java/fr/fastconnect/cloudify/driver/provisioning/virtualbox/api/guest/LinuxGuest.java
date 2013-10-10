@@ -1,7 +1,9 @@
 package fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.guest;
 
+import java.net.InetAddress;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.TimeoutException;
 import java.util.logging.Level;
 
 import org.virtualbox_4_2.VirtualBoxManager;
@@ -128,4 +130,36 @@ public abstract class LinuxGuest extends BaseGuest {
         this.executeScript(machineGuid, login, password, "adduser.sh", addUserScript, endTime);
     }
 
+    protected void waitPublicAddressToBeReachable(String machineGuid, long endTime) throws Exception {
+        while (System.currentTimeMillis() < endTime) {
+            String ipAddress = this.getPublicAddressIP(machineGuid);
+            if (ipAddress != null) {
+                InetAddress inetadrr = InetAddress.getByName(ipAddress);
+                if (inetadrr.isReachable(5000)) {
+                    return;
+                }
+            }
+            try {
+                Thread.sleep(5000L);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+        throw new TimeoutException("Timeout allocating public ip.");
+    }
+
+    protected void waitUntilPrivateIPIsConfigured(String machineGuid, String privateAddrIP, long endTime) throws Exception {
+        while (System.currentTimeMillis() < endTime) {
+            if (privateAddrIP.equals(this.getPrivateAddressIP(machineGuid))) {
+                return;
+            }
+            logger.info("Private IP is not yet configured, waiting...");
+            try {
+                Thread.sleep(1000L);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+        throw new TimeoutException("Timeout configuring private ip.");
+    }
 }
