@@ -71,6 +71,7 @@ public class VirtualboxCloudifyDriverIT {
         tmpCloudDir.delete();
         tmpCloudDir.mkdir();
         tmpCloudDir.deleteOnExit();
+        new File(tmpCloudDir, "upload").mkdir();
         logger.info("Initialize driver using cloud folder at " + tmpCloudDir.getAbsolutePath());
 
         // Copy vbox cloud file into the temporary directory
