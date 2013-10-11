@@ -17,7 +17,6 @@ import org.apache.commons.lang.StringUtils;
 import org.cloudifysource.dsl.cloud.Cloud;
 import org.cloudifysource.esc.driver.provisioning.CloudDriverSupport;
 import org.cloudifysource.esc.driver.provisioning.CloudProvisioningException;
-import org.cloudifysource.esc.driver.provisioning.CustomServiceDataAware;
 import org.cloudifysource.esc.driver.provisioning.MachineDetails;
 import org.cloudifysource.esc.driver.provisioning.ProvisioningDriver;
 import org.cloudifysource.esc.driver.provisioning.context.ProvisioningDriverClassContext;
@@ -26,7 +25,7 @@ import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.VirtualBoxMach
 import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.VirtualBoxService;
 import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.VirtualBoxService42;
 
-public class VirtualboxCloudifyDriver extends CloudDriverSupport implements ProvisioningDriver, CustomServiceDataAware {
+public class VirtualboxCloudifyDriver extends CloudDriverSupport implements ProvisioningDriver {
 
     private static final java.util.logging.Logger logger = java.util.logging.Logger
             .getLogger(VirtualboxCloudifyDriver.class.getName());
@@ -96,7 +95,7 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
     public void setConfig(Cloud cloud, String cloudTemplate, boolean management, String serviceName) {
         super.setConfig(cloud, cloudTemplate, management, serviceName);
 
-        if (this.template.getUsername() == null) {
+        if (StringUtils.isEmpty(this.template.getUsername())) {
             logger.log(Level.WARNING, "Username is not set in the template " + cloudTemplate);
         }
 
@@ -107,7 +106,7 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
         }
 
         this.boxesPath = (String) this.cloud.getCustom().get(VBOX_BOXES_PATH);
-        if (this.boxesPath == null) {
+        if (StringUtils.isEmpty(this.boxesPath)) {
             throw new IllegalArgumentException("Custom field '" + VBOX_BOXES_PATH + "' must be set");
         }
         String boxesProviderString = (String) this.cloud.getCustom().get(VBOX_BOXES_PROVIDER);
@@ -465,11 +464,5 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
 
     public void onServiceUninstalled(long duration, TimeUnit unit) throws InterruptedException, TimeoutException, CloudProvisioningException {
         this.virtualBoxService.disconnect();
-    }
-
-    public void setCustomDataFile(File customDataFile) {
-        String message = "##### setCustomDataFile=" + customDataFile;
-        System.out.println(message);
-        logger.log(Level.INFO, message);
     }
 }

@@ -1,7 +1,7 @@
 Prerequisite
 ------------
 
-* Have [Cloudify >= 2.5](http://www.gigaspaces.com/cloudify-open-paas-stack) installed.
+* Have [Cloudify >= 2.6](http://www.gigaspaces.com/cloudify-open-paas-stack) installed.
 * Have [VirtualBox](https://www.virtualbox.org/) installed. On you local machine or on a server. Tested with 4.2.4.
 * Create a ["HostOnlyInterface"](https://www.virtualbox.org/manual/ch06.html#network_hostonly) with DHCP activated.
 	*  Ex: IP 27.0.0.1 NetMask 255.255.255.0
@@ -56,7 +56,7 @@ Here is the POM configuration to include the driver:
 	<dependency>
 		<groupId>fr.fastconnect</groupId>
 		<artifactId>virtualbox-cloudify-driver</artifactId>
-		<version>1.12</version>
+		<version>1.14</version>
 		<exclusions>
 			<exclusion>
 				<artifactId>esc</artifactId>
@@ -71,7 +71,50 @@ Here is the POM configuration to include the driver:
 </dependencies>
 ```
 
-Here is the full URL: https://fastconnect.org/maven/content/repositories/opensource/fr/fastconnect/virtualbox-cloudify-driver/1.12/virtualbox-cloudify-driver-1.12.jar
+Here is the full URL: https://fastconnect.org/maven/content/repositories/opensource/fr/fastconnect/virtualbox-cloudify-driver/1.14/virtualbox-cloudify-driver-1.14.jar
+
+FAQ
+---
+1. Not able to bootstrap: **Unable to connect to http://25.0.0.1:18083 with login**
+
+Make sure that the VBox WebService is correctly running.
+You may have failed to start the VBox WebService if you have the following output:
+```
+...
+00:00:00.016973 SQPmp    #### SOAP FAULT: Can't assign requested address [SOAP-ENV:Server]
+```
+In this case, the WebService is not able to bind to the HostOnlyInterface IP address (25.0.0.1).
+You can verify that with the **VBoxManage** command:
+```
+$ VBoxManage list hostonlyifs
+Name:            vboxnet0
+GUID:            786f6276-656e-4174-8000-0a0027000001
+DHCP:            Disabled
+IPAddress:       25.0.0.1
+NetworkMask:     255.255.255.0
+IPV6Address:
+IPV6NetworkMaskPrefixLength: 0
+HardwareAddress: 0a:00:27:00:00:01
+MediumType:      Ethernet
+Status:          Down
+VBoxNetworkName: HostInterfaceNetworking-vboxnet0
+```
+The status here is **Down**.
+To activate the HostOnlyInterface on Linux/MacOS, you can use the **ifconfig** command:
+```
+$ VBoxManage hostonlyif ipconfig vboxnet0 --ip 25.0.0.1 --netmask 255.255.255.0
+$ sudo ifconfig vboxnet0 up
+```
+
+You can do it graphically:
+- Go to the **Preferences** menu of VirtualBox
+- Go to the **Network** tab
+- Edit the HostOnlyInterface (double-click)
+- Click OK
+- The HostOnlyInterface should be up
+
+Then you can start again the WebService, and the Cloudify Client to bootstrap again.
+
 
 
 Copyright and license

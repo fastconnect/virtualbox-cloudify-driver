@@ -135,7 +135,7 @@ cloud {
 
     custom ([
         "vbox.boxes.path" : BOXES_PATH,
-        "vbox.boxes.provider" : BOXES_PROVIDER, // Since vagrant 1.1.x, the provider is included in boxes path. i.e. : ${vbox.boxes.path}/precise64/virtualbox/box.ovf, the provider is '/virtualbox/'.
+        "vbox.boxes.provider" : BOXES_PROVIDER, // Optional (default: "virtualbox"). Since vagrant 1.1.5, the provider is included in boxes path. i.e. : ${vbox.boxes.path}/precise64/virtualbox/box.ovf, the provider is '/virtualbox/'.
         "vbox.bridgedInterface" : BRIDGED_INTERFACE, // Choose between host only or bridge interface to handle public address network. 
         //"vbox.hostOnlyInterface" : HOST_ONLY_INTERFACE, // Host only interface is for demo purpose, because when your network card is disable, the public interface is also disable in vbox VM.
         "vbox.serverUrl" : SERVER_URL,

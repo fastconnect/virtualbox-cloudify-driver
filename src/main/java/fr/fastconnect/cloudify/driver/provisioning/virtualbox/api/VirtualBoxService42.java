@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Level;
+import java.util.logging.LogRecord;
 
 import org.apache.commons.lang.StringUtils;
 import org.virtualbox_4_2.CleanupMode;
@@ -36,6 +37,8 @@ import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.guest.VirtualB
 import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.guest.VirtualBoxGuestProvider;
 
 public class VirtualBoxService42 implements VirtualBoxService {
+
+    private static final int VERR_FILE_NOT_FOUND = -2135228412;
 
     private static final java.util.logging.Logger logger = java.util.logging.Logger.getLogger(VirtualBoxService42.class.getName());
 
@@ -197,11 +200,18 @@ public class VirtualBoxService42 implements VirtualBoxService {
 
         IProgress progress = appliance.read(boxPathFile.getPath());
         progress.waitForCompletion((int) timeLeft);
+        
         if (!progress.getCompleted()) {
             throw new TimeoutException("Unable to import VM: Timeout");
         }
+        
         if (progress.getResultCode() != 0) {
-            throw new VirtualBoxException("Unable to import VM: " + progress.getErrorInfo().getText());
+            
+            if(progress.getErrorInfo().getResultCode() == VERR_FILE_NOT_FOUND) {
+                throw new VirtualBoxBoxNotFoundException("Box "+boxPath+" not found. CODE: "+progress.getErrorInfo().getResultCode()+" ERROR:" + progress.getErrorInfo().getText());
+            }
+            
+            throw new VirtualBoxException("Unable to import VM. CODE: "+progress.getErrorInfo().getResultCode()+" ERROR:" + progress.getErrorInfo().getText());
         }
         appliance.interpret();
 
