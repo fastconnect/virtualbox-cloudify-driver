@@ -21,6 +21,7 @@ import org.cloudifysource.esc.driver.provisioning.MachineDetails;
 import org.cloudifysource.esc.driver.provisioning.ProvisioningDriver;
 import org.cloudifysource.esc.driver.provisioning.context.ProvisioningDriverClassContext;
 
+import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.VirtualBoxBoxNotFoundException;
 import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.VirtualBoxMachineInfo;
 import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.VirtualBoxService;
 import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.VirtualBoxService42;
@@ -167,7 +168,7 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
         int numberOfCores = this.template.getNumberOfCores();
         int machineMemoryMB = this.template.getMachineMemoryMB();
         String machineTemplate = this.template.getImageId();
-        File machineTemplateOvfFile = this.getOvfFile(machineTemplate);
+        File machineTemplateOvfFile = this.getOvfFile(machineTemplate, false);
 
         mutex.lock();
         try {
@@ -199,15 +200,29 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
                 }
                 privateAddrIP = PrivateInterfaceConfig.PRIVATE_BASE_IP + "." + lastIP;
 
-                // go to the folder with "boxes"
-                vboxInfo = this.virtualBoxService.create(
-                        machineTemplateOvfFile.toString(),
-                        this.serverNamePrefix + id,
-                        numberOfCores,
-                        machineMemoryMB,
-                        this.publicIfConfig,
-                        this.hostSharedFolder,
-                        endTime);
+                try {
+                    // in the new version of vagrant, boxes are stored in a subfolder depending of the virtualisation tool (virtualbox/vmware/etc.)
+                    // try the new version, if crashes, fallback to old version
+                    vboxInfo = this.virtualBoxService.create(
+                            machineTemplateOvfFile.toString(),
+                            this.serverNamePrefix + id,
+                            numberOfCores,
+                            machineMemoryMB,
+                            this.publicIfConfig,
+                            this.hostSharedFolder,
+                            endTime);
+                } catch (VirtualBoxBoxNotFoundException vboxboxnfe) {
+                    logger.warning("OVF file path was wrong (" + machineTemplateOvfFile.toString() + "), retry with default provider ("
+                            + DEFAULT_BOXES_PROVIDER + ")");
+                    vboxInfo = this.virtualBoxService.create(
+                            this.getOvfFile(machineTemplate, true).toString(),
+                            this.serverNamePrefix + id,
+                            numberOfCores,
+                            machineMemoryMB,
+                            this.publicIfConfig,
+                            this.hostSharedFolder,
+                            endTime);
+                }
 
                 // we can release the mutex now, the VM is created
             } finally {
@@ -270,22 +285,18 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
         return md;
     }
 
-    private File getOvfFile(String machineTemplate) throws CloudProvisioningException {
+    private File getOvfFile(String machineTemplate, boolean forceDefaultProvider) throws CloudProvisioningException {
         File boxesPathFile = new File(this.boxesPath);
         File machineTemplateFolderFile = new File(boxesPathFile, machineTemplate);
         File machineTemplateOvfFile = null;
-        if (this.boxesProvider != null) {
+        if (forceDefaultProvider) {
+            machineTemplateFolderFile = new File(machineTemplateFolderFile, DEFAULT_BOXES_PROVIDER);
+            machineTemplateOvfFile = new File(machineTemplateFolderFile, "box.ovf");
+        } else if (this.boxesProvider != null) {
             machineTemplateFolderFile = new File(machineTemplateFolderFile, this.boxesProvider);
             machineTemplateOvfFile = new File(machineTemplateFolderFile, "box.ovf");
         } else {
             machineTemplateOvfFile = new File(machineTemplateFolderFile, "box.ovf");
-            if (!machineTemplateOvfFile.isFile()) {
-                machineTemplateFolderFile = new File(machineTemplateFolderFile, DEFAULT_BOXES_PROVIDER);
-                machineTemplateOvfFile = new File(machineTemplateFolderFile, "box.ovf");
-            }
-        }
-        if (!machineTemplateOvfFile.isFile()) {
-            throw new CloudProvisioningException("Wrong path to 'box.ovf' file: " + machineTemplateOvfFile.getAbsolutePath());
         }
         return machineTemplateOvfFile;
     }

@@ -136,10 +136,12 @@ public abstract class LinuxGuest extends BaseGuest {
             if (ipAddress != null) {
                 InetAddress inetadrr = InetAddress.getByName(ipAddress);
                 if (inetadrr.isReachable(5000)) {
+                    logger.fine("Waiting public ip: " + ipAddress);
                     return;
                 }
             }
             try {
+                logger.fine("Waiting public ip...");
                 Thread.sleep(5000L);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
