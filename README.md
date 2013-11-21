@@ -74,6 +74,7 @@ Here is the POM configuration to include the driver:
 Here is the full URL: https://fastconnect.org/maven/content/repositories/opensource/fr/fastconnect/virtualbox-cloudify-driver/1.15/virtualbox-cloudify-driver-1.15.jar
 Download the additional jars:
 * http://search.maven.org/remotecontent?filepath=org/virtualbox/vboxjws/4.2.8/vboxjws-4.2.8.jar
+* http://search.maven.org/remotecontent?filepath=commons-codec/commons-codec/20041127.091804/commons-codec-20041127.091804.jar
 
 FAQ
 ---
