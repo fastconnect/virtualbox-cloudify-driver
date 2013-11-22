@@ -1,7 +1,7 @@
 Prerequisite
 ------------
 
-* Have [Cloudify >= 2.6](http://www.gigaspaces.com/cloudify-open-paas-stack) installed.
+* Have [Cloudify >= 2.6.1](http://www.gigaspaces.com/cloudify-open-paas-stack) installed.
 * Have [VirtualBox](https://www.virtualbox.org/) installed. On you local machine or on a server. Tested with 4.2.18.
 * Create a ["HostOnlyInterface"](https://www.virtualbox.org/manual/ch06.html#network_hostonly) with DHCP activated.
 	*  Ex: IP 27.0.0.1 NetMask 255.255.255.0
@@ -41,7 +41,7 @@ You can find a full example of the configuration in src/test/resources (https://
 Download and install
 --------------------
 You can download the driver from our Nexus, and package it in a gigaspaces_overrides.zip (you can use maven:assembly to do that, but you should exclude cloudify dependencies for a lighter archive)
-The use of gigaspaces_overrides is explained here: http://www.cloudifysource.org/guide/2.3/clouddrivers/tutorial_maven (Packing and Adding to Cloudify)
+The use of gigaspaces_overrides is explained here: http://www.cloudifysource.org/guide/2.6/clouddrivers/tutorial_maven (Packing and Adding to Cloudify)
 
 Here is the POM configuration to include the driver:
 ```xml
@@ -56,7 +56,7 @@ Here is the POM configuration to include the driver:
 	<dependency>
 		<groupId>fr.fastconnect</groupId>
 		<artifactId>virtualbox-cloudify-driver</artifactId>
-		<version>1.15</version>
+		<version>1.16</version>
 		<exclusions>
 			<exclusion>
 				<artifactId>esc</artifactId>
@@ -72,6 +72,7 @@ Here is the POM configuration to include the driver:
 ```
 
 Here is the full URL: https://fastconnect.org/maven/content/repositories/opensource/fr/fastconnect/virtualbox-cloudify-driver/1.16/virtualbox-cloudify-driver-1.16.jar
+
 Download the additional jars:
 * http://search.maven.org/remotecontent?filepath=org/virtualbox/vboxjws/4.2.8/vboxjws-4.2.8.jar
 * http://search.maven.org/remotecontent?filepath=commons-codec/commons-codec/20041127.091804/commons-codec-20041127.091804.jar
