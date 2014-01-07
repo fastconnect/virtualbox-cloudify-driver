@@ -1,7 +1,7 @@
 Prerequisite
 ------------
 
-* Have [Cloudify >= 2.6.1](http://www.gigaspaces.com/cloudify-open-paas-stack) installed.
+* Have [Cloudify >= 2.7](http://www.cloudifysource.org/downloads/get_cloudify) installed.
 * Have [VirtualBox](https://www.virtualbox.org/) installed. On you local machine or on a server. Tested with 4.2.18.
 * Create a ["HostOnlyInterface"](https://www.virtualbox.org/manual/ch06.html#network_hostonly) with DHCP activated.
 	*  Ex: IP 27.0.0.1 NetMask 255.255.255.0
@@ -10,10 +10,10 @@ Prerequisite
 ```
 	$ VBoxManage setproperty websrvauthlibrary null
 	$ vboxwebsrv --host 27.0.0.1
-	Oracle VM VirtualBox web service version 4.1.23
-	(C) 2005-2012 Oracle Corporation
+	Oracle VM VirtualBox web service version 4.2.18
+	(C) 2007-2013 Oracle Corporation
 	All rights reserved.
-	VirtualBox web service 4.1.23 r80870 darwin.amd64 (Sep 21 2012 12:31:46) release log
+	VirtualBox web service 4.2.18 r88780 win.amd64 (Sep  6 2013 14:21:01) release log
 	00:00:00.000 main     Log opened 2012-10-17T06:23:02.644109000Z
 	...
 ```

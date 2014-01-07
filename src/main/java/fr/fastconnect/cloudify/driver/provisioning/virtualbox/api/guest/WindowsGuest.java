@@ -89,7 +89,7 @@ public class WindowsGuest extends BaseGuest {
 
         // For some unknown reasons, the script execution is not working.
         // To hack this failure, we execute the script until having a correct private IP.
-        while (this.getPrivateAddressIP(m.getId()) != null) {
+        while (this.getPrivateAddressIP(m.getId()) == null) {
             logger.info("Private IP is not yet configured. retrying...");
             this.executeCommand(m.getId(), login, password, destinationScript, endTime);
             try {

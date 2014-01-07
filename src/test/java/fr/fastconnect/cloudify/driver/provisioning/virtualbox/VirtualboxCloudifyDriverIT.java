@@ -15,11 +15,12 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import org.apache.commons.io.FileUtils;
-import org.cloudifysource.dsl.cloud.Cloud;
-import org.cloudifysource.dsl.cloud.compute.ComputeTemplate;
+import org.cloudifysource.domain.cloud.Cloud;
+import org.cloudifysource.domain.cloud.compute.ComputeTemplate;
 import org.cloudifysource.dsl.internal.DSLException;
 import org.cloudifysource.dsl.internal.ServiceReader;
 import org.cloudifysource.esc.driver.provisioning.CloudProvisioningException;
+import org.cloudifysource.esc.driver.provisioning.ComputeDriverConfiguration;
 import org.cloudifysource.esc.driver.provisioning.MachineDetails;
 import org.cloudifysource.esc.driver.provisioning.ProvisioningContextAccess;
 import org.cloudifysource.esc.driver.provisioning.ProvisioningContextImpl;
@@ -64,7 +65,7 @@ public class VirtualboxCloudifyDriverIT {
     }
 
     private VirtualboxCloudifyDriver createDriver(String computeTemplate, String overridesDir, boolean useBridgeInterface)
-            throws IOException, DSLException {
+            throws IOException, DSLException, CloudProvisioningException {
 
         // Create a temporary directory
         File tmpCloudDir = File.createTempFile("vbox-test", "");
@@ -114,15 +115,25 @@ public class VirtualboxCloudifyDriverIT {
         ctx.getInstallationDetailsBuilder().setCloud(cloud);
         ComputeTemplate template = cloud.getCloudCompute().getTemplates().get(computeTemplate);
         ctx.getInstallationDetailsBuilder().setTemplate(template);
-        driver.setConfig(cloud, computeTemplate, true, cloud.getConfiguration().getManagementMachineTemplate());
+
+        ComputeDriverConfiguration configuration = new ComputeDriverConfiguration();
+        configuration.setCloud(cloud);
+        configuration.setCloudTemplate(computeTemplate);
+        configuration.setManagement(true);
+
+        driver.setConfig(configuration);
         logger.info(cloud.toString());
         return driver;
     }
 
-    private void doTestStarMachine(String computeTemplate, String overridesDir, boolean useBridgeInterface) throws Exception {
+    private void doTestStarManagementMachine(String computeTemplate, String overridesDir, boolean useBridgeInterface) throws Exception {
         VirtualboxCloudifyDriver driver = this.createDriver(computeTemplate, overridesDir, useBridgeInterface);
         try {
-            MachineDetails md = driver.startMachine(null, 60, TimeUnit.MINUTES);
+            MachineDetails[] mds = driver.startManagementMachines(null, TIMEOUT, TimeUnit.MILLISECONDS);
+
+            Assert.assertNotNull("MachineDetails is null", mds);
+            Assert.assertFalse("MachineDetails is empty", mds.length == 0);
+            MachineDetails md = mds[0];
             String publicAddress = md.getPublicAddress();
             logger.info("public ip=" + publicAddress);
             Assert.assertNotNull("machineId is null", md.getMachineId());
@@ -140,7 +151,7 @@ public class VirtualboxCloudifyDriverIT {
         } finally {
             if (driver != null) {
                 try {
-                    driver.stopManagementMachines();
+                    // driver.stopManagementMachines();
                 } catch (Exception e) {
                     // FIXME Sometimes throw exception because the session is locked.
                     logger.log(Level.WARNING, "Fail to stop machine", e);
@@ -177,22 +188,22 @@ public class VirtualboxCloudifyDriverIT {
 
     @Test(timeout = TIMEOUT)
     public void testStartMachineUbuntuBridgeInterface() throws Exception {
-        this.doTestStarMachine("SMALL_LINUX", "./src/test/resources/ubuntu", true);
+        this.doTestStarManagementMachine("SMALL_LINUX", "./src/test/resources/ubuntu", true);
     }
 
     @Test(timeout = TIMEOUT)
     public void testStartMachineUbuntuHostOnlyInterface() throws Exception {
-        this.doTestStarMachine("SMALL_LINUX", "./src/test/resources/ubuntu", false);
+        this.doTestStarManagementMachine("SMALL_LINUX", "./src/test/resources/ubuntu", false);
     }
 
     @Test(timeout = TIMEOUT)
     public void testStartMachineWindowsBridgeInterface() throws Exception {
-        this.doTestStarMachine("SMALL_WIN", "./src/test/resources/windows", true);
+        this.doTestStarManagementMachine("SMALL_WIN", "./src/test/resources/windows", true);
     }
 
     @Test(timeout = TIMEOUT)
     public void testStartMachineWindowsHostOnlyInterface() throws Exception {
-        this.doTestStarMachine("SMALL_WIN", "./src/test/resources/windows", false);
+        this.doTestStarManagementMachine("SMALL_WIN", "./src/test/resources/windows", false);
     }
 
     @Test

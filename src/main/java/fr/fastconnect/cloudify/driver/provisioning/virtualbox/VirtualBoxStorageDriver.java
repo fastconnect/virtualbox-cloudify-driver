@@ -9,8 +9,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.logging.Level;
 
-import org.cloudifysource.dsl.cloud.Cloud;
-import org.cloudifysource.dsl.cloud.storage.StorageTemplate;
+import org.cloudifysource.domain.cloud.Cloud;
+import org.cloudifysource.domain.cloud.storage.StorageTemplate;
 import org.cloudifysource.esc.driver.provisioning.storage.BaseStorageDriver;
 import org.cloudifysource.esc.driver.provisioning.storage.StorageProvisioningDriver;
 import org.cloudifysource.esc.driver.provisioning.storage.StorageProvisioningException;
@@ -25,13 +25,7 @@ public class VirtualBoxStorageDriver extends BaseStorageDriver implements Storag
 
     private static final String VBOX_HARDDISK_TYPE = "vbox.hardDiskType";
 
-    // private static final String VBOX_URL = "vbox.serverUrl";
-
     private Cloud cloud;
-
-    //private String computeTemplateName;
-
-    // private String virtualBoxUrl;
 
     private VirtualBoxDriverContext virtualBoxDriverContext;
 
@@ -50,15 +44,7 @@ public class VirtualBoxStorageDriver extends BaseStorageDriver implements Storag
     }
 
     public void setConfig(Cloud cloud, String computeTemplateName) {
-
         this.cloud = cloud;
-        //this.computeTemplateName = computeTemplateName;
-        /*
-         * this.virtualBoxUrl = (String) this.cloud.getCustom().get(VBOX_URL);
-         * if (this.virtualBoxUrl == null) {
-         * throw new IllegalArgumentException("Custom field '" + VBOX_URL + "' must be set");
-         * }
-         */
     }
 
     public VolumeDetails createVolume(String templateName, String location, long duration, TimeUnit timeUnit) throws TimeoutException,

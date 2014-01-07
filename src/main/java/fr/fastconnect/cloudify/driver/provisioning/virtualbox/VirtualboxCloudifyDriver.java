@@ -1,12 +1,6 @@
 package fr.fastconnect.cloudify.driver.provisioning.virtualbox;
 
 import java.io.File;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.ReentrantLock;
@@ -14,11 +8,14 @@ import java.util.logging.Level;
 
 import org.apache.commons.lang.BooleanUtils;
 import org.apache.commons.lang.StringUtils;
-import org.cloudifysource.dsl.cloud.Cloud;
-import org.cloudifysource.esc.driver.provisioning.CloudDriverSupport;
+import org.cloudifysource.domain.cloud.Cloud;
+import org.cloudifysource.domain.cloud.compute.ComputeTemplate;
+import org.cloudifysource.esc.driver.provisioning.BaseProvisioningDriver;
 import org.cloudifysource.esc.driver.provisioning.CloudProvisioningException;
+import org.cloudifysource.esc.driver.provisioning.ComputeDriverConfiguration;
 import org.cloudifysource.esc.driver.provisioning.MachineDetails;
-import org.cloudifysource.esc.driver.provisioning.ProvisioningDriver;
+import org.cloudifysource.esc.driver.provisioning.ManagementProvisioningContext;
+import org.cloudifysource.esc.driver.provisioning.ProvisioningContext;
 import org.cloudifysource.esc.driver.provisioning.context.ProvisioningDriverClassContext;
 
 import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.VirtualBoxBoxNotFoundException;
@@ -26,7 +23,7 @@ import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.VirtualBoxMach
 import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.VirtualBoxService;
 import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.VirtualBoxService42;
 
-public class VirtualboxCloudifyDriver extends CloudDriverSupport implements ProvisioningDriver {
+public class VirtualboxCloudifyDriver extends BaseProvisioningDriver {
 
     private static final java.util.logging.Logger logger = java.util.logging.Logger
             .getLogger(VirtualboxCloudifyDriver.class.getName());
@@ -61,6 +58,8 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
 
     private VirtualBoxService virtualBoxService = new VirtualBoxService42();
 
+    private ComputeTemplate template;
+
     private void checkHostOnlyInterface() throws Exception {
         checkHostOnlyInterface(false);
     }
@@ -93,11 +92,12 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
     }
 
     @Override
-    public void setConfig(Cloud cloud, String cloudTemplate, boolean management, String serviceName) {
-        super.setConfig(cloud, cloudTemplate, management, serviceName);
+    public void setConfig(final ComputeDriverConfiguration configuration) throws CloudProvisioningException {
+        super.setConfig(configuration);
 
+        this.template = this.cloud.getCloudCompute().getTemplates().get(this.getCloudTemplateName());
         if (StringUtils.isEmpty(this.template.getUsername())) {
-            logger.log(Level.WARNING, "Username is not set in the template " + cloudTemplate);
+            logger.log(Level.WARNING, "Username is not set in the template " + this.template);
         }
 
         if (this.management) {
@@ -144,25 +144,42 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
         logger.log(Level.INFO, "[VBOX] Storage Controller Name = " + storageControllerName);
     }
 
-    public MachineDetails startMachine(String locationId, long duration, TimeUnit unit)
+    @Override
+    protected void initDeployer(Cloud cloud) {
+        // TODO Auto-generated method stub
+    }
+
+    @Override
+    public MachineDetails startMachine(final ProvisioningContext context, final long duration, final TimeUnit unit)
             throws TimeoutException, CloudProvisioningException {
+        logger.fine(this.getClass().getName() + ": startMachine, management mode: " + management);
+        final long end = System.currentTimeMillis() + unit.toMillis(duration);
 
-        logger.info(String.format("Start VBox machine (timeout = %s ms)", unit.toMillis(duration)));
+        if (System.currentTimeMillis() > end) {
+            throw new TimeoutException("Starting a new machine timed out");
+        }
 
-        final long endTime = System.currentTimeMillis() + unit.toMillis(duration);
+        // final String groupName = serverNamePrefix + this.configuration.getServiceName() + "-" + counter.incrementAndGet();
+        // logger.fine("Starting a new cloud server with group: " + groupName);
+        final ComputeTemplate computeTemplate = this.cloud.getCloudCompute().getTemplates().get(this.cloudTemplateName);
+        final MachineDetails md = this.createServer(null, end, computeTemplate);
+        return md;
+    }
+
+    /**
+     * @param serverName
+     *            This parameter is not used. We generate our own machine names with indexes to handle the host files.
+     */
+    @Override
+    protected MachineDetails createServer(String serverName, long endTime, ComputeTemplate template) throws CloudProvisioningException, TimeoutException {
+
+        logger.info(String.format("Start VBox machine (timeout = %s ms)", endTime));
 
         try {
             checkHostOnlyInterface(true);
         } catch (Exception ex) {
             logger.log(Level.SEVERE, "Unable to create host interface", ex);
             throw new CloudProvisioningException("Unable to create host interface", ex);
-        }
-
-        MachineDetails md;
-        String machineName = this.serverNamePrefix;
-        String machineNamePrefix = (String) this.template.getCustom().get("machineNamePrefix");
-        if (!StringUtils.isEmpty(machineNamePrefix)) {
-            machineName = machineNamePrefix;
         }
 
         int numberOfCores = this.template.getNumberOfCores();
@@ -180,9 +197,9 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
                 VirtualBoxMachineInfo[] infos = this.virtualBoxService.getAll();
 
                 for (VirtualBoxMachineInfo info : infos) {
-                    if (info.getMachineName().startsWith(machineName)) {
+                    if (info.getMachineName().startsWith(this.serverNamePrefix)) {
                         // TODO : try catch parsing int
-                        int currentId = Integer.parseInt(info.getMachineName().substring(machineName.length()));
+                        int currentId = Integer.parseInt(info.getMachineName().substring(this.serverNamePrefix.length()));
                         if (currentId > id) {
                             id = currentId;
                         }
@@ -265,7 +282,7 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
             String publicAddrIP = this.virtualBoxService.getPublicAddressIP(vboxInfo.getGuid());
             String machinePrivateAddrIP = this.virtualBoxService.getPrivateAddressIP(vboxInfo.getGuid());
 
-            md = new MachineDetails();
+            MachineDetails md = new MachineDetails();
             md.setMachineId(vboxInfo.getGuid());
             md.setAgentRunning(false);
             md.setCloudifyInstalled(false);
@@ -279,10 +296,10 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
             md.setPrivateAddress(machinePrivateAddrIP);
             md.setPublicAddress(publicAddrIP);
 
+            return md;
         } catch (final Exception e) {
             throw new CloudProvisioningException(e);
         }
-        return md;
     }
 
     private File getOvfFile(String machineTemplate, boolean forceDefaultProvider) throws CloudProvisioningException {
@@ -301,64 +318,47 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
         return machineTemplateOvfFile;
     }
 
-    public MachineDetails[] startManagementMachines(long duration, TimeUnit timeout)
-            throws TimeoutException, CloudProvisioningException {
+    @Override
+    public MachineDetails[] startManagementMachines(final ManagementProvisioningContext context, final long duration,
+            final TimeUnit unit) throws TimeoutException, CloudProvisioningException {
 
-        final int numOfManagementMachines = cloud.getProvider().getNumberOfManagementMachines();
-
-        final ExecutorService executor = Executors.newFixedThreadPool(cloud.getProvider().getNumberOfManagementMachines());
-
-        // TODO : don't create Management machine if already exists
-
-        try {
-            return doStartManagement(duration, timeout, numOfManagementMachines, executor);
-        } finally {
-            executor.shutdown();
+        if (duration < 0) {
+            throw new TimeoutException("Starting a new machine timed out");
         }
+
+        final long endTime = System.currentTimeMillis() + unit.toMillis(duration);
+
+        logger.fine("DefaultCloudProvisioning: startMachine - management == " + management);
+
+        // TODO first check if management already exists
+        // final MachineDetails[] existingManagementServers = this.getExistingManagementServers();
+        // if (existingManagementServers.length > 0) {
+        // final String serverDescriptions = this.createExistingServersDescription(this.serverNamePrefix, existingManagementServers);
+        // throw new CloudProvisioningException("Found existing servers matching group "
+        // + this.serverNamePrefix + ": " + serverDescriptions);
+        // }
+
+        // launch the management machines
+        publishEvent(EVENT_ATTEMPT_START_MGMT_VMS);
+        final int numberOfManagementMachines = this.cloud.getProvider().getNumberOfManagementMachines();
+        final MachineDetails[] createdMachines = this.doStartManagementMachines(endTime, numberOfManagementMachines);
+        publishEvent(EVENT_MGMT_VMS_STARTED);
+        return createdMachines;
     }
 
-    private MachineDetails[] doStartManagement(final long duration, final TimeUnit timeout, int numOfManagementMachines,
-            ExecutorService executor) throws CloudProvisioningException {
+    @Override
+    protected void handleProvisioningFailure(int numberOfManagementMachines, int numberOfErrors, Exception firstCreationException,
+            MachineDetails[] createdManagementMachines) throws CloudProvisioningException {
+        logger.severe("Of the required " + numberOfManagementMachines
+                + " management machines, " + numberOfErrors
+                + " failed to start.");
+        if (numberOfManagementMachines > numberOfErrors) {
+            logger.severe("Shutting down the other management machines");
 
-        final long endTime = System.currentTimeMillis() + timeout.toMillis(duration);
-
-        // launch machine on a thread
-        final List<Future<MachineDetails>> list = new ArrayList<Future<MachineDetails>>(numOfManagementMachines);
-        for (int i = 0; i < numOfManagementMachines; i++) {
-            final Future<MachineDetails> task = executor.submit(new Callable<MachineDetails>() {
-
-                // @Override
-                public MachineDetails call()
-                        throws Exception {
-                    return startMachine(null, duration, timeout);
-                }
-
-            });
-            list.add(task);
-        }
-
-        // get the machines
-        Exception firstException = null;
-        final List<MachineDetails> machines = new ArrayList<MachineDetails>(numOfManagementMachines);
-        for (final Future<MachineDetails> future : list) {
-            try {
-                machines.add(future.get());
-            } catch (final Exception e) {
-                if (firstException == null) {
-                    firstException = e;
-                }
-            }
-        }
-
-        if (firstException == null) {
-            return machines.toArray(new MachineDetails[machines.size()]);
-        } else {
-            // in case of an exception, clear the machines
-            logger.warning("Provisioning of management machines failed, the following node will be shut down: " + machines);
-
-            for (final MachineDetails machineDetails : machines) {
+            for (final MachineDetails machineDetails : createdManagementMachines) {
                 try {
                     // TODO : do it in a thread to detect TIMEOUT
+                    long endTime = System.currentTimeMillis() + 1000l * 60l * 5l; // 5 minutes
                     this.virtualBoxService.stop(machineDetails.getMachineId(), endTime);
                     if (this.destroyMachines) {
                         this.virtualBoxService.destroy(machineDetails.getMachineId(), endTime);
@@ -373,9 +373,10 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
                                     + " failed. This machine may be leaking. Error was: " + e.getMessage(), e);
                 }
             }
-
-            throw new CloudProvisioningException("Failed to launch management machines: " + firstException.getMessage(), firstException);
         }
+        throw new CloudProvisioningException(
+                "One or more management machines failed. The first encountered error was: "
+                        + firstCreationException.getMessage(), firstCreationException);
     }
 
     public boolean stopMachine(String machineIp, long duration, TimeUnit timeout)
@@ -455,10 +456,7 @@ public class VirtualboxCloudifyDriver extends CloudDriverSupport implements Prov
         }
     }
 
-    public String getCloudName() {
-        return this.cloud.getName();
-    }
-
+    @Override
     public Object getComputeContext() {
         try {
             this.checkHostOnlyInterface();

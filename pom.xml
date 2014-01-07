@@ -10,8 +10,8 @@
 
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-		<cloudifyVersion>2.6.1-5200-RELEASE</cloudifyVersion>
-		<openspacesVersion>9.6.1-9700-RELEASE</openspacesVersion>
+		<cloudifyVersion>2.7.0-SNAPSHOT</cloudifyVersion>
+		<openspacesVersion>9.7.0-SNAPSHOT</openspacesVersion>
 	</properties>
 
 	<repositories>
@@ -36,6 +36,12 @@
 		<dependency>
 			<groupId>org.cloudifysource</groupId>
 			<artifactId>esc</artifactId>
+			<version>${cloudifyVersion}</version>
+			<scope>provided</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.cloudifysource</groupId>
+			<artifactId>domain</artifactId>
 			<version>${cloudifyVersion}</version>
 			<scope>provided</scope>
 		</dependency>

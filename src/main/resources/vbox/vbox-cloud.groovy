@@ -93,9 +93,9 @@ cloud {
                 password  "vagrant"
                 remoteDirectory "/home/vagrant/gs-files"
                 localDirectory "upload"
-                remoteExecution org.cloudifysource.dsl.cloud.RemoteExecutionModes.SSH
-                fileTransfer org.cloudifysource.dsl.cloud.FileTransferModes.SCP
-                scriptLanguage org.cloudifysource.dsl.cloud.ScriptLanguages.LINUX_SHELL
+                remoteExecution "SSH"
+                fileTransfer "SCP"
+                scriptLanguage "LINUX_SHELL"
                 // enable sudo.
                 privileged true
                 options ([:])
@@ -117,11 +117,11 @@ cloud {
                 localDirectory "upload"
                 
                 // File transfer mode. Optional, defaults to SCP.
-                fileTransfer org.cloudifysource.dsl.cloud.FileTransferModes.CIFS
+                fileTransfer "CIFS"
                 // Remote execution mode. Options, defaults to SSH.
-                remoteExecution org.cloudifysource.dsl.cloud.RemoteExecutionModes.WINRM
+                remoteExecution "WINRM"
                 // Script language for remote execution. Defaults to Linux Shell.
-                scriptLanguage org.cloudifysource.dsl.cloud.ScriptLanguages.WINDOWS_BATCH
+                scriptLanguage "WINDOWS_BATCH"
                 
                 privileged true 
                 options ([:])
