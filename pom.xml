@@ -10,8 +10,8 @@
 
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-		<cloudifyVersion>2.7.0-SNAPSHOT</cloudifyVersion>
-		<openspacesVersion>9.7.0-SNAPSHOT</openspacesVersion>
+		<cloudifyVersion>2.7.0-5996-RELEASE</cloudifyVersion>
+		<openspacesVersion>9.7.0-10496-RELEASE</openspacesVersion>
 	</properties>
 
 	<repositories>
