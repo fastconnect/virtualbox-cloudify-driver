@@ -17,7 +17,7 @@ public abstract class BaseGuest implements VirtualBoxGuest {
     private static final java.util.logging.Logger logger = java.util.logging.Logger
             .getLogger(BaseGuest.class.getName());
 
-    private static final ReentrantLock mutex = new ReentrantLock();
+    protected static final ReentrantLock mutex = new ReentrantLock();
 
     protected VirtualBoxManager virtualBoxManager;
 

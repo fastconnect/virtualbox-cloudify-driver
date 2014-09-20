@@ -62,7 +62,8 @@ public class RedhatGuest extends LinuxGuest {
 
         String updateinterfacesContent = "#!/bin/bash\n" +
                 "cat /tmp/ifcfg-eth0 | sudo tee /etc/sysconfig/network-scripts/ifcfg-eth0\n" +
-                "sudo cp /etc/sysconfig/network-scripts/ifcfg-eth0 /etc/sysconfig/network-scripts/ifcfg-eth1 /etc/sysconfig/network-scripts/ifcfg-eth2\n" +
+                "sudo cp /etc/sysconfig/network-scripts/ifcfg-eth0 /etc/sysconfig/network-scripts/ifcfg-eth1\n" +
+                "sudo cp /etc/sysconfig/network-scripts/ifcfg-eth0 /etc/sysconfig/network-scripts/ifcfg-eth2\n" +
                 "sudo chmod a+r /etc/sysconfig/network-scripts/ifcfg-eth*\n" +
                 "cat /tmp/ifcfg-eth1 | sudo tee /etc/sysconfig/network-scripts/ifcfg-eth1\n" +
                 "cat /tmp/ifcfg-eth2 | sudo tee /etc/sysconfig/network-scripts/ifcfg-eth2\n";

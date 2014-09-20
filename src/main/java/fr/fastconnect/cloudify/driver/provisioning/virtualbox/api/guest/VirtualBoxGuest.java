@@ -1,5 +1,7 @@
 package fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.guest;
 
+import java.util.List;
+
 public interface VirtualBoxGuest {
 
     void updateHostname(String machineGuid, String login, String password, String hostname, long endTime) throws Exception;
@@ -11,6 +13,12 @@ public interface VirtualBoxGuest {
     void executeScript(String machineGuid, String login, String password, String filename, String content, long endTime) throws Exception;
 
     void createFile(String machineGuid, String login, String password, String destination, String content, long endTime) throws Exception;
+
+    long executeCommand(String machineGuid, String login, String password, String command, long endTime) throws Exception;
+
+    long executeCommand(String machineGuid, String login, String password, String command, List<String> args, long endTime) throws Exception;
+
+    long executeCommand(String machineGuid, String login, String password, String command, List<String> args, List<String> envs, long endTime) throws Exception;
 
     void ping(String machineGuid, String login, String password, long endTime) throws Exception;
 

@@ -6,7 +6,8 @@ import java.util.List;
 import java.util.concurrent.TimeoutException;
 import java.util.logging.Level;
 
-import org.virtualbox_4_2.VirtualBoxManager;
+import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.VirtualBoxException;
+import org.virtualbox_4_2.*;
 
 public abstract class LinuxGuest extends BaseGuest {
 
@@ -28,7 +29,7 @@ public abstract class LinuxGuest extends BaseGuest {
      * @see fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.VirtualBoxGuestController#createFile(java.lang.String, java.lang.String,
      * java.lang.String, java.lang.String, java.lang.String)
      */
-    public void createFile(String machineGuid, String login, String password, String destination, String content, long endTime) throws Exception {
+    /*public void createFile(String machineGuid, String login, String password, String destination, String content, long endTime) throws Exception {
         logger.log(Level.INFO, "Trying to create file '" + destination + "' on machine '" + machineGuid + "'");
 
         // ultra hack: VirtualBox has a 'fileCreate' function, but not in the WS API
@@ -56,8 +57,11 @@ public abstract class LinuxGuest extends BaseGuest {
                     login,
                     password,
                     "/bin/bash",
-                    //Arrays.asList("-c", "echo '" + line + "' >> " + destination + ".base64"),
-                    Arrays.asList("-c", "echo '" + line + "' |tee -a " + destination + ".base64"),
+                    //"/bin/echo",
+                    //Arrays.asList("-c", "&quot;echo " + line + " >> " + destination + ".base64&quot;"),
+                    Arrays.asList("-c", "'echo " + line + " >> " + destination + ".base64'"),
+                    //Arrays.asList("-c", "'echo " + line + " | tee -a " + destination + ".base64'"),
+                    //Arrays.asList(line,">>", destination + ".base64"),
                     endTime);
         }
 
@@ -78,6 +82,68 @@ public abstract class LinuxGuest extends BaseGuest {
         // "/bin/rm",
         // Arrays.asList(destination+".base64"),
         // Arrays.asList(new String[0]));
+    }*/
+
+
+    /*
+     * (non-Javadoc)
+     *
+     * @see fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.VirtualBoxGuestController#createFile(java.lang.String, java.lang.String,
+     * java.lang.String, java.lang.String, java.lang.String)
+     */
+    public void createFile(String machineGuid, String login, String password, String destination, String content, long endTime) throws Exception {
+        logger.log(Level.INFO, "Trying to create file '" + destination + "' on machine '" + machineGuid + "'");
+
+        IMachine m = virtualBoxManager.getVBox().findMachine(machineGuid);
+
+        mutex.lock();
+
+        try {
+            ISession session = virtualBoxManager.openMachineSession(m);
+            m = session.getMachine();
+            IConsole console = session.getConsole();
+            IGuest guest = console.getGuest();
+
+            IGuestSession guestSession = guest.createSession(login, password, "", "");
+            try {
+
+                long timeLeft = endTime - System.currentTimeMillis();
+                IGuestProcess process = guestSession.processCreate("/bin/bash", Arrays.asList(new String[0]), Arrays.asList(new String[0]),
+                        Arrays.asList(ProcessCreateFlag.None), timeLeft);
+
+                timeLeft = endTime - System.currentTimeMillis();
+                process.waitFor(new Long(ProcessWaitForFlag.Start.value()), timeLeft);
+
+                timeLeft = endTime - System.currentTimeMillis();
+                process.waitFor(new Long(ProcessWaitForFlag.StdIn.value()), timeLeft);
+
+                String command = "echo '"+content+"' >> "+destination+"\nexit\n";
+                long maxWaitForWrite = 1*1000l;
+                try {
+                    process.writeArray(0l, Arrays.asList(ProcessInputFlag.EndOfFile), command.getBytes("UTF-8"), (timeLeft > maxWaitForWrite ? maxWaitForWrite : timeLeft));
+                }catch(VBoxException vbe){
+                    if(vbe.getMessage().contains("VERR_TIMEOUT (0x80BB0005)")){
+                        // "write" hang, don't know why :(
+                        // maybe there's a solution?: https://www.virtualbox.org/pipermail/vbox-dev/2013-June/011556.html
+                    }
+                    else {
+                        throw vbe;
+                    }
+                }
+
+                timeLeft = endTime - System.currentTimeMillis();
+                process.waitFor(new Long(ProcessWaitForFlag.Terminate.value()), timeLeft);
+                if (process.getStatus() != ProcessStatus.TerminatedNormally) {
+                    throw new VirtualBoxException("Unable to create file '" + destination + "': Status "
+                            + process.getStatus() + " ExitCode " + process.getExitCode());
+                }
+            } finally {
+                guestSession.close();
+                this.virtualBoxManager.closeMachineSession(session);
+            }
+        } finally {
+            mutex.unlock();
+        }
     }
 
     /*
