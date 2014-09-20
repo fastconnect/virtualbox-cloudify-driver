@@ -29,7 +29,6 @@ public abstract class LinuxGuest extends BaseGuest {
      * java.lang.String, java.lang.String, java.lang.String)
      */
     public void createFile(String machineGuid, String login, String password, String destination, String content, long endTime) throws Exception {
-
         logger.log(Level.INFO, "Trying to create file '" + destination + "' on machine '" + machineGuid + "'");
 
         // ultra hack: VirtualBox has a 'fileCreate' function, but not in the WS API
@@ -57,7 +56,8 @@ public abstract class LinuxGuest extends BaseGuest {
                     login,
                     password,
                     "/bin/bash",
-                    Arrays.asList("-c", "echo '" + line + "' >> " + destination + ".base64"),
+                    //Arrays.asList("-c", "echo '" + line + "' >> " + destination + ".base64"),
+                    Arrays.asList("-c", "echo '" + line + "' |tee -a " + destination + ".base64"),
                     endTime);
         }
 

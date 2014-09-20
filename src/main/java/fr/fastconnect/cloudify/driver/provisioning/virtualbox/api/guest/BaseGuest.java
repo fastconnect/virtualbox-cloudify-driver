@@ -8,16 +8,7 @@ import java.util.logging.Level;
 
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.lang.StringUtils;
-import org.virtualbox_4_2.IConsole;
-import org.virtualbox_4_2.IGuest;
-import org.virtualbox_4_2.IGuestProcess;
-import org.virtualbox_4_2.IGuestSession;
-import org.virtualbox_4_2.IMachine;
-import org.virtualbox_4_2.ISession;
-import org.virtualbox_4_2.ProcessCreateFlag;
-import org.virtualbox_4_2.ProcessStatus;
-import org.virtualbox_4_2.ProcessWaitForFlag;
-import org.virtualbox_4_2.VirtualBoxManager;
+import org.virtualbox_4_2.*;
 
 import fr.fastconnect.cloudify.driver.provisioning.virtualbox.api.VirtualBoxException;
 
@@ -107,6 +98,39 @@ public abstract class BaseGuest implements VirtualBoxGuest {
             mutex.unlock();
         }
     }
+
+    /*
+     * VirtualBox error: Method Write is not implemented (0x80004001)
+     *
+    public void createFile(String machineGuid, String login, String password, String destination, String content, long endTime) throws Exception {
+        logger.log(Level.INFO, "Trying to create file '" + destination + "' on machine '" + machineGuid + "'");
+
+        IMachine m = virtualBoxManager.getVBox().findMachine(machineGuid);
+
+        mutex.lock();
+
+        try {
+            ISession session = virtualBoxManager.openMachineSession(m);
+            m = session.getMachine();
+            IConsole console = session.getConsole();
+            IGuest guest = console.getGuest();
+
+            IGuestSession guestSession = guest.createSession(login, password, "", "");
+            try {
+
+                IGuestFile file = guestSession.fileOpen(destination, "w+", "ca", 777l, 0l);
+                long timeLeft = endTime - System.currentTimeMillis();
+                file.write(content.getBytes("UTF-8"), timeLeft);
+                file.close();
+            } finally {
+                guestSession.close();
+                this.virtualBoxManager.closeMachineSession(session);
+            }
+        } finally {
+            mutex.unlock();
+        }
+    }
+    */
 
     public void runCommandsBeforeBootstrap(String machineGuid, String login, String password, long endTime) throws Exception {
         // Do nothing by default
