@@ -10,15 +10,19 @@
 
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-		<cloudifyVersion>2.7.0-5996-RELEASE</cloudifyVersion>
-		<openspacesVersion>9.7.0-10496-RELEASE</openspacesVersion>
+        <cloudifyVersion>2.7.0-5996-RELEASE</cloudifyVersion>
+        <openspacesVersion>9.7.0-10496-RELEASE</openspacesVersion>
 	</properties>
 
 	<repositories>
-		<repository>
-			<id>org.cloudifysource</id>
-			<url>http://maven-repository.cloudifysource.org</url>
-		</repository>
+        <repository>
+            <id>org.cloudifysource</id>
+            <url>http://maven-repository.cloudifysource.org</url>
+        </repository>
+        <repository>
+            <id>org.openspaces</id>
+            <url>http://maven-repository.openspaces.org</url>
+        </repository>
 	</repositories>
 
 	<distributionManagement>
@@ -45,13 +49,13 @@
 			<version>${cloudifyVersion}</version>
 			<scope>provided</scope>
 		</dependency>
-		<dependency>
-			<groupId>org.cloudifysource</groupId>
+        <dependency>
+            <groupId>org.cloudifysource</groupId>
 			<artifactId>dsl</artifactId>
-			<version>${cloudifyVersion}</version>
-			<scope>provided</scope>
-		</dependency>
-		<dependency>
+            <version>${cloudifyVersion}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
 			<groupId>com.gigaspaces</groupId>
 			<artifactId>gs-openspaces</artifactId>
 			<version>${openspacesVersion}</version>
@@ -73,7 +77,7 @@
 			<artifactId>junit</artifactId>
 			<version>4.10</version>
 			<scope>test</scope>
-		</dependency>
+		</dependency> 
 		<dependency>
 			<groupId>org.codehaus.groovy</groupId>
 			<artifactId>groovy</artifactId>
@@ -82,17 +86,17 @@
 		</dependency>
 	</dependencies>
 
-	<build>
-		<plugins>
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-compiler-plugin</artifactId>
-				<version>2.3.2</version>
-				<configuration>
-					<source>1.5</source>
-					<target>1.5</target>
-				</configuration>
-			</plugin>
-		</plugins>
-	</build>
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>2.3.2</version>
+                <configuration>
+                    <source>1.6</source>
+                    <target>1.6</target>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
 </project>
