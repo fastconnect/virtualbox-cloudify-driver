@@ -105,6 +105,7 @@ public abstract class LinuxGuest extends BaseGuest {
             IGuest guest = console.getGuest();
 
             IGuestSession guestSession = guest.createSession(login, password, "", "");
+
             try {
 
                 long timeLeft = endTime - System.currentTimeMillis();
@@ -117,7 +118,7 @@ public abstract class LinuxGuest extends BaseGuest {
                 timeLeft = endTime - System.currentTimeMillis();
                 process.waitFor(new Long(ProcessWaitForFlag.StdIn.value()), timeLeft);
 
-                String command = "echo '"+content+"' >> "+destination+"\nexit\n";
+                String command = "echo \""+content+"\" >> "+destination+"\nexit\n";
                 long maxWaitForWrite = 1*1000l;
                 try {
                     process.writeArray(0l, Arrays.asList(ProcessInputFlag.EndOfFile), command.getBytes("UTF-8"), (timeLeft > maxWaitForWrite ? maxWaitForWrite : timeLeft));
