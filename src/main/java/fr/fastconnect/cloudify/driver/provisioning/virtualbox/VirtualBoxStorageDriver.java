@@ -233,21 +233,24 @@ public class VirtualBoxStorageDriver extends BaseStorageDriver implements Storag
     }
 
     private String ipToMachineName(String ip) throws StorageProvisioningException {
-        if (!ip.startsWith(this.virtualBoxDriverContext.getBaseIP())) {
-            throw new StorageProvisioningException("Invalid IP: " + ip + ", should start with " + this.virtualBoxDriverContext.getBaseIP());
+
+        try {
+            // get all machines to find the right one thanks to the IP
+            for(VirtualBoxMachineInfo machineInfo : this.virtualBoxDriverContext.getVirtualBoxService().getAll()){
+                String publicIP = this.virtualBoxDriverContext.getVirtualBoxService().getPublicAddressIP(machineInfo.getGuid());
+                String privateIP = this.virtualBoxDriverContext.getVirtualBoxService().getPrivateAddressIP(machineInfo.getGuid());
+                if(publicIP != null && publicIP.equals(ip)){
+                    return machineInfo.getMachineName();
+                }
+                else if(privateIP != null && privateIP.equals(ip)){
+                    return machineInfo.getMachineName();
+                }
+            }
+        } catch (Exception e) {
+            throw new StorageProvisioningException("Unable to retrieve name of the machine with IP: " + ip, e);
         }
 
-        String lastIpString = ip.substring(this.virtualBoxDriverContext.getBaseIP().length() + 1);
-        Integer lastIP = Integer.parseInt(lastIpString);
-
-        if (this.virtualBoxDriverContext.isManagement()) {
-            lastIP = lastIP - 1;
-        }
-        else {
-            lastIP = lastIP - 9;
-        }
-
-        return this.virtualBoxDriverContext.getServerNamePrefix() + lastIP;
+        throw new StorageProvisioningException("Unable to find machine with IP: " + ip);
     }
 
 }
